@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: n8n-rustful-operator
+  namespace: n8n-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: n8n-rustful-operator
+rules:
+  - apiGroups: ["n8n.slys.dev"]
+    resources: ["instances", "instances/status", "instances/finalizers"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: n8n-rustful-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: n8n-rustful-operator
+subjects:
+  - kind: ServiceAccount
+    name: n8n-rustful-operator
+    namespace: n8n-operator
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n-rustful-operator
+  namespace: n8n-operator
+  labels:
+    app.kubernetes.io/name: n8n-rustful-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: n8n-rustful-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: n8n-rustful-operator
+    spec:
+      serviceAccountName: n8n-rustful-operator
+      containers:
+        - name: operator
+          image: ghcr.io/jakub-k-slys/n8n-rustful-operator:__IMAGE_TAG__
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: RUST_LOG
+              value: info,kube=info,n8n_rustful_operator=info
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { cpu: 500m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n8n-operator
