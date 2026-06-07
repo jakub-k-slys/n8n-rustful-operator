@@ -2,12 +2,12 @@ name: release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to release (e.g. v0.0.1)"
-        required: true
+        description: "Force a tag (e.g. v0.0.1). Leave empty to auto-bump from conventional commits."
+        required: false
         type: string
 
 permissions:
@@ -19,19 +19,40 @@ env:
   IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
+  tag:
+    name: compute tag
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.bump.outputs.new_tag || github.event.inputs.tag }}
+      new_version: ${{ steps.bump.outputs.new_version || steps.manual.outputs.version }}
+      changelog: ${{ steps.bump.outputs.changelog }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: bump
+        if: github.event.inputs.tag == ''
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: false
+          release_branches: main
+          tag_prefix: v
+      - id: manual
+        if: github.event.inputs.tag != ''
+        run: |
+          tag="${{ github.event.inputs.tag }}"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
   build:
     name: musl build
+    needs: tag
+    if: needs.tag.outputs.new_tag != ''
     runs-on: ubuntu-latest
     container: clux/muslrust:stable
-    outputs:
-      version: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
-      - id: meta
-        run: |
-          tag="${{ github.event.inputs.tag || github.ref_name }}"
-          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
       - run: cargo build --release --bin n8n-rustful-operator
       - uses: actions/upload-artifact@v7
         with:
@@ -41,8 +62,9 @@ jobs:
 
   docker:
     name: ghcr.io image
+    needs: [tag, build]
+    if: needs.tag.outputs.new_tag != ''
     runs-on: ubuntu-latest
-    needs: [build]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
@@ -61,8 +83,8 @@ jobs:
         with:
           images: ${{ env.IMAGE }}
           tags: |
-            type=semver,pattern={{version}},value=${{ github.event.inputs.tag || github.ref_name }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ github.event.inputs.tag || github.ref_name }}
+            type=semver,pattern={{version}},value=${{ needs.tag.outputs.new_tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.tag.outputs.new_tag }}
             type=raw,value=latest
       - uses: docker/build-push-action@v7
         with:
@@ -73,14 +95,16 @@ jobs:
 
   release:
     name: github release
+    needs: [tag, build, docker]
+    if: needs.tag.outputs.new_tag != ''
     runs-on: ubuntu-latest
-    needs: [build, docker]
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.tag.outputs.new_tag }}
       - name: stage manifests with pinned image tag
         run: |
-          tag="${{ github.event.inputs.tag || github.ref_name }}"
-          version="${tag#v}"
+          version="${{ needs.tag.outputs.new_version }}"
           mkdir -p dist
           cp yaml/crd.yaml dist/crd.yaml
           cp yaml/instance-sample.yaml dist/instance-sample.yaml
@@ -91,15 +115,18 @@ jobs:
           sha256sum dist/*.yaml > dist/SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          generate_release_notes: true
+          tag_name: ${{ needs.tag.outputs.new_tag }}
+          name: ${{ needs.tag.outputs.new_tag }}
           body: |
-            Container image: `ghcr.io/${{ github.repository }}:${{ needs.build.outputs.version }}`
+            Container image: `${{ env.IMAGE }}:${{ needs.tag.outputs.new_version }}`
 
             Install:
             ```sh
-            kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.tag || github.ref_name }}/n8n-rustful-operator-${{ needs.build.outputs.version }}.yaml
+            kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${{ needs.tag.outputs.new_tag }}/n8n-rustful-operator-${{ needs.tag.outputs.new_version }}.yaml
             ```
+
+            ## Changelog
+            ${{ needs.tag.outputs.changelog }}
           files: |
             dist/crd.yaml
             dist/install.yaml
