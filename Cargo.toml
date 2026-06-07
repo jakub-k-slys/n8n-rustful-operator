@@ -1,10 +1,12 @@
 [package]
 name = "n8n-rustful-operator"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Jakub Slys <jakub.k.slys@gmail.com>"]
 edition = "2024"
 default-run = "n8n-rustful-operator"
 license = "Apache-2.0"
+description = "Kubernetes operator that reconciles n8n.slys.dev/Instance into n8n Deployments"
+repository = "https://github.com/jakub-k-slys/n8n-rustful-operator"
 publish = false
 
 [[bin]]
