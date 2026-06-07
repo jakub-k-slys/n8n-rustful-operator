@@ -1,27 +1,27 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: n8ninstances.n8n.slys.dev
+  name: instances.n8n.slys.dev
 spec:
   group: n8n.slys.dev
   names:
     categories: []
-    kind: N8nInstance
-    plural: n8ninstances
+    kind: Instance
+    plural: instances
     shortNames:
     - n8n
-    singular: n8ninstance
+    singular: instance
   scope: Namespaced
   versions:
   - additionalPrinterColumns: []
     name: v1
     schema:
       openAPIV3Schema:
-        description: Auto-generated derived type for N8nInstanceSpec via `CustomResource`
+        description: Auto-generated derived type for InstanceSpec via `CustomResource`
         properties:
           spec:
             description: |-
-              `N8nInstance` is a Kubernetes-native description of an n8n deployment.
+              `Instance` is a Kubernetes-native description of an n8n deployment.
 
               The reconciler creates a Deployment and Service for each instance and reports
               readiness back through the resource status.
@@ -57,7 +57,7 @@ spec:
             type: object
         required:
         - spec
-        title: N8nInstance
+        title: Instance
         type: object
     served: true
     storage: true

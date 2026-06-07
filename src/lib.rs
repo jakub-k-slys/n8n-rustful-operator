@@ -11,8 +11,8 @@ pub enum Error {
     #[error("Finalizer Error: {0}")]
     FinalizerError(#[source] Box<kube::runtime::finalizer::Error<Error>>),
 
-    #[error("IllegalN8nInstance")]
-    IllegalN8nInstance,
+    #[error("IllegalInstance")]
+    IllegalInstance,
 }
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
