@@ -1,0 +1,9 @@
+apiVersion: n8n.slys.dev/v1
+kind: N8nInstance
+metadata:
+  name: demo
+  namespace: default
+spec:
+  image: n8nio/n8n:latest
+  replicas: 1
+  host: n8n.example.com
