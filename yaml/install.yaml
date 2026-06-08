@@ -1,4 +1,9 @@
 apiVersion: v1
+kind: Namespace
+metadata:
+  name: n8n-operator
+---
+apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: n8n-rustful-operator
@@ -72,8 +77,3 @@ spec:
           resources:
             requests: { cpu: 50m, memory: 64Mi }
             limits:   { cpu: 500m, memory: 256Mi }
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: n8n-operator
