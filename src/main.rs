@@ -38,7 +38,7 @@ async fn log_level(
     match EnvFilter::try_new(&body.filter) {
         Ok(new_filter) => {
             handle.reload(new_filter).unwrap();
-            HttpResponse::Ok().json(&body.into_inner())
+            HttpResponse::Ok().json(body.into_inner())
         }
         Err(e) => HttpResponse::BadRequest().json(serde_json::json!({"error": e.to_string()})),
     }

@@ -1,11 +1,13 @@
 use crate::{Error, Metrics, Result, telemetry};
 use futures::StreamExt;
 use jiff::Timestamp;
-use k8s_openapi::api::{
-    apps::v1::Deployment,
-    core::v1::{Service, ServicePort},
+use k8s_openapi::{
+    api::{
+        apps::v1::Deployment,
+        core::v1::{Service, ServicePort},
+    },
+    apimachinery::pkg::util::intstr::IntOrString,
 };
-use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kube::{
     CustomResource, Resource,
     api::{Api, ListParams, ObjectMeta, Patch, PatchParams, ResourceExt},
