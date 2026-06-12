@@ -12,99 +12,71 @@ on:
 
 permissions:
   contents: write
-  packages: write
 
 env:
   CARGO_TERM_COLOR: always
   IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
-  tag:
-    name: compute tag
+  release:
+    name: tag + github release
     runs-on: ubuntu-latest
     outputs:
-      new_tag: ${{ steps.bump.outputs.new_tag || github.event.inputs.tag }}
+      new_tag: ${{ steps.bump.outputs.new_tag || steps.manual.outputs.tag }}
       new_version: ${{ steps.bump.outputs.new_version || steps.manual.outputs.version }}
-      changelog: ${{ steps.bump.outputs.changelog }}
     steps:
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
       - id: bump
         if: github.event.inputs.tag == ''
         uses: mathieudutour/github-tag-action@v6.2
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # App token so the pushed tag triggers downstream workflows
+          # (a tag pushed by GITHUB_TOKEN is silently ignored by GHA).
+          github_token: ${{ steps.app-token.outputs.token }}
           default_bump: false
           release_branches: main
           tag_prefix: v
+
       - id: manual
         if: github.event.inputs.tag != ''
         run: |
           tag="${{ github.event.inputs.tag }}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
-  build:
-    name: musl build
-    needs: tag
-    if: needs.tag.outputs.new_tag != ''
-    runs-on: ubuntu-latest
-    container: clux/muslrust:stable
-    steps:
-      - uses: actions/checkout@v6
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release --bin n8n-rustful-operator
-      - uses: actions/upload-artifact@v7
-        with:
-          name: musl-binary
-          path: target/x86_64-unknown-linux-musl/release/n8n-rustful-operator
-          if-no-files-found: error
-
-  docker:
-    name: ghcr.io image
-    needs: [tag, build]
-    if: needs.tag.outputs.new_tag != ''
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v8
-        with:
-          name: musl-binary
-          path: .
-      - run: chmod +x ./n8n-rustful-operator
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/metadata-action@v5
-        id: tags
-        with:
-          images: ${{ env.IMAGE }}
-          tags: |
-            type=semver,pattern={{version}},value=${{ needs.tag.outputs.new_tag }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.tag.outputs.new_tag }}
-            type=raw,value=latest
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.tags.outputs.tags }}
-          labels: ${{ steps.tags.outputs.labels }}
-
-  release:
-    name: github release
-    needs: [tag, build, docker]
-    if: needs.tag.outputs.new_tag != ''
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.tag.outputs.new_tag }}
-      - name: stage manifests with pinned image tag
+      - name: stop if no new tag
+        id: gate
         run: |
-          version="${{ needs.tag.outputs.new_version }}"
+          tag="${{ steps.bump.outputs.new_tag || steps.manual.outputs.tag }}"
+          if [ -z "$tag" ]; then
+            echo "no conventional-commit bump and no manual tag; nothing to release"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.gate.outputs.skip != 'true'
+
+      - uses: Swatinem/rust-cache@v2
+        if: steps.gate.outputs.skip != 'true'
+
+      - name: regenerate CRD
+        if: steps.gate.outputs.skip != 'true'
+        run: cargo run --bin crdgen > yaml/crd.yaml
+
+      - name: stage manifests with pinned image tag
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          version="${{ steps.bump.outputs.new_version || steps.manual.outputs.version }}"
           mkdir -p dist
           cp yaml/crd.yaml dist/crd.yaml
           cp yaml/instance-sample.yaml dist/instance-sample.yaml
@@ -113,20 +85,25 @@ jobs:
           echo "---" >> "dist/n8n-rustful-operator-${version}.yaml"
           cat dist/install.yaml >> "dist/n8n-rustful-operator-${version}.yaml"
           sha256sum dist/*.yaml > dist/SHA256SUMS
+
       - uses: softprops/action-gh-release@v2
+        if: steps.gate.outputs.skip != 'true'
         with:
-          tag_name: ${{ needs.tag.outputs.new_tag }}
-          name: ${{ needs.tag.outputs.new_tag }}
+          # App token so the `release: published` event triggers docker.yml.
+          token: ${{ steps.app-token.outputs.token }}
+          tag_name: ${{ steps.bump.outputs.new_tag || steps.manual.outputs.tag }}
+          name: ${{ steps.bump.outputs.new_tag || steps.manual.outputs.tag }}
           body: |
-            Container image: `${{ env.IMAGE }}:${{ needs.tag.outputs.new_version }}`
+            Container image: `${{ env.IMAGE }}:${{ steps.bump.outputs.new_version || steps.manual.outputs.version }}`
+            (built by the docker workflow that runs right after this release.)
 
             Install:
             ```sh
-            kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${{ needs.tag.outputs.new_tag }}/n8n-rustful-operator-${{ needs.tag.outputs.new_version }}.yaml
+            kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${{ steps.bump.outputs.new_tag || steps.manual.outputs.tag }}/n8n-rustful-operator-${{ steps.bump.outputs.new_version || steps.manual.outputs.version }}.yaml
             ```
 
             ## Changelog
-            ${{ needs.tag.outputs.changelog }}
+            ${{ steps.bump.outputs.changelog }}
           files: |
             dist/crd.yaml
             dist/install.yaml

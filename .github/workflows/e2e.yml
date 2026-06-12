@@ -1,58 +1,63 @@
 name: e2e
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  registry_package:
+    types: [published, updated]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to test (e.g. v0.0.5)."
+        required: true
+        type: string
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+permissions:
+  contents: read
+  packages: read
 
 env:
-  CARGO_TERM_COLOR: always
-  IMAGE: n8n-rustful-operator:e2e
-  # Lightweight stand-in for n8nio/n8n in the smoke test — we are testing the
-  # operator's reconcile loop (Deployment+Service creation, status), not n8n itself.
+  IMAGE: ghcr.io/${{ github.repository }}
   TEST_INSTANCE_IMAGE: nginx:alpine
 
 jobs:
-  e2e:
+  smoke:
     name: kind smoke test
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
+    # Skip registry_package events that aren't for our operator image
+    # (e.g. cache packages, other artifacts).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.registry_package.package_type == 'container' &&
+       github.event.registry_package.name == github.event.repository.name)
     steps:
+      - name: resolve image tag
+        id: tag
+        env:
+          MANUAL: ${{ github.event.inputs.tag }}
+          PKG_VERSION_NAME: ${{ github.event.registry_package.package_version.container_metadata.tag.name }}
+        run: |
+          if [ -n "$MANUAL" ]; then
+            tag="$MANUAL"
+          elif [ -n "$PKG_VERSION_NAME" ] && [ "$PKG_VERSION_NAME" != "latest" ]; then
+            tag="v$PKG_VERSION_NAME"
+          else
+            echo "no usable tag in event payload"; exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v6
-
-      - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-unknown-linux-musl
+          ref: ${{ steps.tag.outputs.tag }}
 
-      - uses: Swatinem/rust-cache@v2
-
-      - name: install musl tools
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
-
-      - name: regenerate CRD from source
-        run: cargo run --bin crdgen > yaml/crd.yaml
-
-      - name: musl build (operator binary)
-        run: cargo build --release --target x86_64-unknown-linux-musl --bin n8n-rustful-operator
-
-      - name: stage binary for Dockerfile
-        run: cp target/x86_64-unknown-linux-musl/release/n8n-rustful-operator .
-
-      - uses: docker/setup-buildx-action@v4
-
-      - name: build operator image
-        uses: docker/build-push-action@v7
+      - uses: docker/login-action@v3
         with:
-          context: .
-          push: false
-          load: true
-          tags: ${{ env.IMAGE }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: pull ghcr image
+        run: docker pull "${{ env.IMAGE }}:${{ steps.tag.outputs.version }}"
 
       - name: create kind cluster
         uses: helm/kind-action@v1
@@ -60,15 +65,15 @@ jobs:
           cluster_name: n8n-e2e
           wait: 120s
 
-      - name: load operator image into kind
-        run: kind load docker-image "${{ env.IMAGE }}" --name n8n-e2e
+      - name: load image into kind
+        run: kind load docker-image "${{ env.IMAGE }}:${{ steps.tag.outputs.version }}" --name n8n-e2e
 
       - name: install CRD
         run: kubectl apply -f yaml/crd.yaml
 
-      - name: install operator
+      - name: install operator (pinned to tested tag, imagePullPolicy Never)
         run: |
-          sed -e "s|ghcr.io/jakub-k-slys/n8n-rustful-operator:__IMAGE_TAG__|${{ env.IMAGE }}|g" \
+          sed -e "s|__IMAGE_TAG__|${{ steps.tag.outputs.version }}|g" \
               -e "s|imagePullPolicy: IfNotPresent|imagePullPolicy: Never|g" \
               yaml/install.yaml | kubectl apply -f -
           kubectl -n n8n-operator rollout status deployment/n8n-rustful-operator --timeout=120s
@@ -89,9 +94,6 @@ jobs:
 
       - name: wait for child Deployment to be created
         run: |
-          # Operator's job is to create the Deployment. Whether the user-supplied
-          # image actually becomes Ready is the user's concern, not the operator's
-          # — and the e2e uses a stand-in image that won't satisfy n8n's probe.
           for i in {1..60}; do
             if kubectl -n default get deployment/e2e >/dev/null 2>&1; then break; fi
             echo "waiting for deployment/e2e ($i)…"; sleep 2
@@ -117,10 +119,9 @@ jobs:
           kubectl -n default get instance/e2e -o jsonpath='{.metadata.finalizers}' \
             | grep -q 'instances.n8n.slys.dev'
 
-      - name: delete Instance and check cleanup event
+      - name: delete Instance and check cleanup
         run: |
           kubectl -n default delete instance/e2e --wait=true --timeout=60s
-          # the Instance object is gone — verify by listing
           if kubectl -n default get instance/e2e 2>/dev/null; then
             echo "instance still present after delete" >&2; exit 1
           fi
