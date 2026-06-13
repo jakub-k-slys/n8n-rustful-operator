@@ -185,6 +185,6 @@ async fn instance_gone(w: &mut E2eWorld, name: String, secs: u64) {
 async fn main() {
     E2eWorld::cucumber()
         .fail_on_skipped()
-        .run_and_exit("tests/features")
+        .run_and_exit("features")
         .await;
 }

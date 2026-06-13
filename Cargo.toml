@@ -56,5 +56,6 @@ cucumber = "0.23"
 
 [[test]]
 name = "cucumber"
+path = "features/cucumber.rs"
 harness = false
 
