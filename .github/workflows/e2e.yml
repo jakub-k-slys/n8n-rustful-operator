@@ -84,7 +84,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: run cucumber BDD suite
-        run: cargo test --test cucumber --release -- --tags '~@skip'
+        run: cargo test --test cucumber --release
 
       - name: dump operator logs on failure
         if: failure()
