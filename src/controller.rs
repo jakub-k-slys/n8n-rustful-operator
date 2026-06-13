@@ -4,7 +4,7 @@ use jiff::Timestamp;
 use k8s_openapi::{
     api::{
         apps::v1::Deployment,
-        core::v1::{Secret, Service, ServicePort},
+        core::v1::{PersistentVolumeClaim, Secret, Service, ServicePort},
         networking::v1::Ingress,
     },
     apimachinery::pkg::{apis::meta::v1::OwnerReference, util::intstr::IntOrString},
@@ -66,6 +66,9 @@ pub struct InstanceSpec {
     /// `<instance>-encryption-key` and owns it via ownerReference.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "encryptionKey")]
     pub encryption_key: Option<EncryptionKeySpec>,
+    /// Database backend configuration. Omit for n8n's sqlite default with no extra env vars.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub database: Option<DatabaseSpec>,
 }
 
 fn default_image() -> String {
@@ -125,6 +128,112 @@ pub struct SecretKeyRef {
 
 fn default_secret_key() -> String {
     "encryption_key".to_string()
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+pub struct DatabaseSpec {
+    /// `sqlite` (default), `postgresdb`, `mysqldb` or `mariadb` — maps directly to `DB_TYPE`.
+    #[serde(default = "default_db_type", rename = "type")]
+    pub type_: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sqlite: Option<SqliteConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub postgres: Option<PostgresConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mysql: Option<MysqlConfig>,
+}
+
+fn default_db_type() -> String {
+    "sqlite".to_string()
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+pub struct PostgresConfig {
+    pub host: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<i32>,
+    pub database: String,
+    pub user: String,
+    #[serde(rename = "passwordSecret")]
+    pub password_secret: SecretKeyRef,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schema: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ssl: Option<DatabaseSsl>,
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "poolSize")]
+    pub pool_size: Option<u32>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "connectionTimeoutMs"
+    )]
+    pub connection_timeout_ms: Option<u32>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+pub struct MysqlConfig {
+    pub host: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<i32>,
+    pub database: String,
+    pub user: String,
+    #[serde(rename = "passwordSecret")]
+    pub password_secret: SecretKeyRef,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ssl: Option<DatabaseSsl>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "connectionTimeoutMs"
+    )]
+    pub connection_timeout_ms: Option<u32>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+pub struct SqliteConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "poolSize")]
+    pub pool_size: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "vacuumOnStartup")]
+    pub vacuum_on_startup: Option<bool>,
+    /// Path inside the pod, mapped to `DB_SQLITE_DATABASE`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub database: Option<String>,
+    /// Mount a PVC at `/home/node/.n8n` so the sqlite file survives pod restarts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub persistence: Option<PersistenceConfig>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+pub struct DatabaseSsl {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "rejectUnauthorized"
+    )]
+    pub reject_unauthorized: Option<bool>,
+    /// Mount as `/etc/n8n/ssl/ca/ca.crt` and pass via `DB_*_SSL_CA`.
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "caSecret")]
+    pub ca_secret: Option<SecretKeyRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "certSecret")]
+    pub cert_secret: Option<SecretKeyRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "keySecret")]
+    pub key_secret: Option<SecretKeyRef>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+pub struct PersistenceConfig {
+    /// Storage request, e.g. `1Gi`.
+    pub size: String,
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "storageClassName")]
+    pub storage_class_name: Option<String>,
+    #[serde(default = "default_access_mode", rename = "accessMode")]
+    pub access_mode: String,
+}
+
+fn default_access_mode() -> String {
+    "ReadWriteOnce".to_string()
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
@@ -203,6 +312,10 @@ impl Instance {
             return Err(Error::ConflictingNetworking);
         }
 
+        if let Some(db) = &self.spec.database {
+            validate_database(db)?;
+        }
+
         let owner = self.owner_reference();
         let ps = PatchParams::apply("n8n-rustful-operator").force();
 
@@ -211,6 +324,17 @@ impl Instance {
         let deployments: Api<Deployment> = Api::namespaced(client.clone(), &ns);
         let services: Api<Service> = Api::namespaced(client.clone(), &ns);
         let instances: Api<Instance> = Api::namespaced(client.clone(), &ns);
+        let pvcs: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), &ns);
+
+        if let Some(pvc) = build_data_pvc(&name, self.spec.database.as_ref(), &owner) {
+            pvcs.patch(
+                pvc.metadata.name.as_deref().unwrap_or(&name),
+                &ps,
+                &Patch::Apply(&pvc),
+            )
+            .await
+            .map_err(Error::KubeError)?;
+        }
 
         let dep = build_deployment(&name, &self.spec, &key_secret, &owner);
         deployments
@@ -224,16 +348,8 @@ impl Instance {
             .await
             .map_err(Error::KubeError)?;
 
-        let want_ingress = self
-            .spec
-            .networking
-            .as_ref()
-            .and_then(|n| n.ingress.as_ref());
-        let want_route = self
-            .spec
-            .networking
-            .as_ref()
-            .and_then(|n| n.http_route.as_ref());
+        let want_ingress = self.spec.networking.as_ref().and_then(|n| n.ingress.as_ref());
+        let want_route = self.spec.networking.as_ref().and_then(|n| n.http_route.as_ref());
 
         let ingress_api: Api<Ingress> = Api::namespaced(client.clone(), &ns);
         if let Some(ing_cfg) = want_ingress {
@@ -324,12 +440,7 @@ impl Instance {
         let name = format!("{}-encryption-key", self.name_any());
         let key = "encryption_key".to_string();
         let secrets: Api<Secret> = Api::namespaced(ctx.client.clone(), ns);
-        if secrets
-            .get_opt(&name)
-            .await
-            .map_err(Error::KubeError)?
-            .is_none()
-        {
+        if secrets.get_opt(&name).await.map_err(Error::KubeError)?.is_none() {
             let mut buf = [0u8; 32];
             rand::rng().fill_bytes(&mut buf);
             let value = hex::encode(buf);
@@ -347,7 +458,10 @@ impl Instance {
                 type_: Some("Opaque".to_string()),
                 ..Default::default()
             };
-            secrets.create(&Default::default(), &secret).await.map_err(Error::KubeError)?;
+            secrets
+                .create(&Default::default(), &secret)
+                .await
+                .map_err(Error::KubeError)?;
         }
         Ok(SecretKeyRef { name, key })
     }
@@ -389,6 +503,20 @@ fn build_deployment(
     owner: &OwnerReference,
 ) -> Deployment {
     let labels = selector(name);
+    let mut env = vec![json!({
+        "name": "N8N_ENCRYPTION_KEY",
+        "valueFrom": { "secretKeyRef": { "name": key_secret.name, "key": key_secret.key } }
+    })];
+    let mut volumes: Vec<serde_json::Value> = Vec::new();
+    let mut mounts: Vec<serde_json::Value> = Vec::new();
+
+    if let Some(db) = &spec.database {
+        env.extend(build_db_env(db));
+        let (vols, vm) = build_db_volumes(name, db);
+        volumes.extend(vols);
+        mounts.extend(vm);
+    }
+
     let dep_json = json!({
         "apiVersion": "apps/v1",
         "kind": "Deployment",
@@ -403,19 +531,13 @@ fn build_deployment(
             "template": {
                 "metadata": { "labels": labels },
                 "spec": {
+                    "volumes": volumes,
                     "containers": [{
                         "name": "n8n",
                         "image": spec.image,
                         "ports": [{ "containerPort": 5678, "name": "http" }],
-                        "env": [{
-                            "name": "N8N_ENCRYPTION_KEY",
-                            "valueFrom": {
-                                "secretKeyRef": {
-                                    "name": key_secret.name,
-                                    "key": key_secret.key,
-                                }
-                            }
-                        }],
+                        "env": env,
+                        "volumeMounts": mounts,
                         "readinessProbe": {
                             "httpGet": { "path": "/healthz", "port": "http" },
                             "initialDelaySeconds": 10,
@@ -427,6 +549,219 @@ fn build_deployment(
         }
     });
     serde_json::from_value(dep_json).expect("static deployment schema is valid")
+}
+
+fn validate_database(db: &DatabaseSpec) -> Result<()> {
+    let illegal = |msg: &str| -> Result<()> { Err(Error::IllegalDatabase(msg.to_string())) };
+    let extras_for_type = |ty: &str| -> Vec<&'static str> {
+        let mut v = vec![];
+        if ty != "sqlite" && db.sqlite.is_some() {
+            v.push(".sqlite");
+        }
+        if ty != "postgresdb" && db.postgres.is_some() {
+            v.push(".postgres");
+        }
+        if !matches!(ty, "mysqldb" | "mariadb") && db.mysql.is_some() {
+            v.push(".mysql");
+        }
+        v
+    };
+    match db.type_.as_str() {
+        "sqlite" => {
+            let extras = extras_for_type("sqlite");
+            if !extras.is_empty() {
+                return illegal(&format!("type=sqlite but {} also set", extras.join(", ")));
+            }
+        }
+        "postgresdb" => {
+            if db.postgres.is_none() {
+                return illegal("type=postgresdb requires .database.postgres");
+            }
+            let extras = extras_for_type("postgresdb");
+            if !extras.is_empty() {
+                return illegal(&format!("type=postgresdb but {} also set", extras.join(", ")));
+            }
+        }
+        "mysqldb" | "mariadb" => {
+            if db.mysql.is_none() {
+                return illegal(&format!("type={} requires .database.mysql", db.type_));
+            }
+            let extras = extras_for_type(&db.type_);
+            if !extras.is_empty() {
+                return illegal(&format!("type={} but {} also set", db.type_, extras.join(", ")));
+            }
+        }
+        other => return illegal(&format!("unknown type {other:?}")),
+    }
+    Ok(())
+}
+
+fn env_str(name: &str, value: impl Into<serde_json::Value>) -> serde_json::Value {
+    json!({ "name": name, "value": value.into().to_string().trim_matches('"').to_string() })
+}
+
+fn env_secret(name: &str, sec: &SecretKeyRef) -> serde_json::Value {
+    json!({
+        "name": name,
+        "valueFrom": { "secretKeyRef": { "name": sec.name, "key": sec.key } }
+    })
+}
+
+fn build_db_env(db: &DatabaseSpec) -> Vec<serde_json::Value> {
+    let mut out = vec![json!({ "name": "DB_TYPE", "value": db.type_ })];
+    match db.type_.as_str() {
+        "postgresdb" => {
+            if let Some(pg) = &db.postgres {
+                out.push(json!({ "name": "DB_POSTGRESDB_HOST", "value": pg.host }));
+                if let Some(p) = pg.port {
+                    out.push(env_str("DB_POSTGRESDB_PORT", p.to_string()));
+                }
+                out.push(json!({ "name": "DB_POSTGRESDB_DATABASE", "value": pg.database }));
+                out.push(json!({ "name": "DB_POSTGRESDB_USER", "value": pg.user }));
+                out.push(env_secret("DB_POSTGRESDB_PASSWORD", &pg.password_secret));
+                if let Some(s) = &pg.schema {
+                    out.push(json!({ "name": "DB_POSTGRESDB_SCHEMA", "value": s }));
+                }
+                if let Some(sz) = pg.pool_size {
+                    out.push(env_str("DB_POSTGRESDB_POOL_SIZE", sz.to_string()));
+                }
+                if let Some(t) = pg.connection_timeout_ms {
+                    out.push(env_str("DB_POSTGRESDB_CONNECTION_TIMEOUT", t.to_string()));
+                }
+                if let Some(ssl) = &pg.ssl {
+                    push_ssl_env(&mut out, "DB_POSTGRESDB", ssl);
+                }
+            }
+        }
+        "mysqldb" | "mariadb" => {
+            if let Some(my) = &db.mysql {
+                out.push(json!({ "name": "DB_MYSQLDB_HOST", "value": my.host }));
+                if let Some(p) = my.port {
+                    out.push(env_str("DB_MYSQLDB_PORT", p.to_string()));
+                }
+                out.push(json!({ "name": "DB_MYSQLDB_DATABASE", "value": my.database }));
+                out.push(json!({ "name": "DB_MYSQLDB_USER", "value": my.user }));
+                out.push(env_secret("DB_MYSQLDB_PASSWORD", &my.password_secret));
+                if let Some(t) = my.connection_timeout_ms {
+                    out.push(env_str("DB_MYSQLDB_CONNECTION_TIMEOUT", t.to_string()));
+                }
+                if let Some(ssl) = &my.ssl {
+                    push_ssl_env(&mut out, "DB_MYSQLDB", ssl);
+                }
+            }
+        }
+        "sqlite" => {
+            if let Some(sq) = &db.sqlite {
+                if let Some(sz) = sq.pool_size {
+                    out.push(env_str("DB_SQLITE_POOL_SIZE", sz.to_string()));
+                }
+                if let Some(v) = sq.vacuum_on_startup {
+                    out.push(env_str("DB_SQLITE_VACUUM_ON_STARTUP", v.to_string()));
+                }
+                if let Some(d) = &sq.database {
+                    out.push(json!({ "name": "DB_SQLITE_DATABASE", "value": d }));
+                }
+            }
+        }
+        _ => {}
+    }
+    out
+}
+
+fn push_ssl_env(out: &mut Vec<serde_json::Value>, prefix: &str, ssl: &DatabaseSsl) {
+    out.push(env_str(&format!("{prefix}_SSL_ENABLED"), ssl.enabled.to_string()));
+    if let Some(r) = ssl.reject_unauthorized {
+        out.push(env_str(
+            &format!("{prefix}_SSL_REJECT_UNAUTHORIZED"),
+            r.to_string(),
+        ));
+    }
+    if ssl.ca_secret.is_some() {
+        out.push(env_str(&format!("{prefix}_SSL_CA"), "/etc/n8n/ssl/ca/ca.crt"));
+    }
+    if ssl.cert_secret.is_some() {
+        out.push(env_str(
+            &format!("{prefix}_SSL_CERT"),
+            "/etc/n8n/ssl/cert/cert.crt",
+        ));
+    }
+    if ssl.key_secret.is_some() {
+        out.push(env_str(&format!("{prefix}_SSL_KEY"), "/etc/n8n/ssl/key/key.pem"));
+    }
+}
+
+fn build_db_volumes(instance: &str, db: &DatabaseSpec) -> (Vec<serde_json::Value>, Vec<serde_json::Value>) {
+    let mut vols = vec![];
+    let mut mounts = vec![];
+    let ssl_ref = match db.type_.as_str() {
+        "postgresdb" => db.postgres.as_ref().and_then(|p| p.ssl.as_ref()),
+        "mysqldb" | "mariadb" => db.mysql.as_ref().and_then(|m| m.ssl.as_ref()),
+        _ => None,
+    };
+    if let Some(ssl) = ssl_ref {
+        if let Some(sec) = &ssl.ca_secret {
+            vols.push(secret_volume("n8n-db-ssl-ca", &sec.name, &sec.key, "ca.crt"));
+            mounts.push(json!({ "name": "n8n-db-ssl-ca", "mountPath": "/etc/n8n/ssl/ca", "readOnly": true }));
+        }
+        if let Some(sec) = &ssl.cert_secret {
+            vols.push(secret_volume("n8n-db-ssl-cert", &sec.name, &sec.key, "cert.crt"));
+            mounts.push(
+                json!({ "name": "n8n-db-ssl-cert", "mountPath": "/etc/n8n/ssl/cert", "readOnly": true }),
+            );
+        }
+        if let Some(sec) = &ssl.key_secret {
+            vols.push(secret_volume("n8n-db-ssl-key", &sec.name, &sec.key, "key.pem"));
+            mounts
+                .push(json!({ "name": "n8n-db-ssl-key", "mountPath": "/etc/n8n/ssl/key", "readOnly": true }));
+        }
+    }
+    if let Some(sq) = db.sqlite.as_ref()
+        && sq.persistence.is_some()
+    {
+        let pvc = format!("{instance}-data");
+        vols.push(json!({
+            "name": "n8n-data",
+            "persistentVolumeClaim": { "claimName": pvc }
+        }));
+        mounts.push(json!({ "name": "n8n-data", "mountPath": "/home/node/.n8n" }));
+    }
+    (vols, mounts)
+}
+
+fn secret_volume(name: &str, secret_name: &str, secret_key: &str, file: &str) -> serde_json::Value {
+    json!({
+        "name": name,
+        "secret": {
+            "secretName": secret_name,
+            "items": [{ "key": secret_key, "path": file }],
+        }
+    })
+}
+
+fn build_data_pvc(
+    instance: &str,
+    db: Option<&DatabaseSpec>,
+    owner: &OwnerReference,
+) -> Option<PersistentVolumeClaim> {
+    let p = db
+        .and_then(|d| d.sqlite.as_ref())
+        .and_then(|s| s.persistence.as_ref())?;
+    let labels = selector(instance);
+    let json = json!({
+        "apiVersion": "v1",
+        "kind": "PersistentVolumeClaim",
+        "metadata": {
+            "name": format!("{instance}-data"),
+            "labels": labels,
+            "ownerReferences": [owner],
+        },
+        "spec": {
+            "accessModes": [p.access_mode],
+            "resources": { "requests": { "storage": p.size } },
+            "storageClassName": p.storage_class_name,
+        }
+    });
+    Some(serde_json::from_value(json).expect("static pvc schema is valid"))
 }
 
 fn build_service(name: &str, spec: &InstanceSpec, owner: &OwnerReference) -> Service {
@@ -497,7 +832,9 @@ async fn delete_http_route(client: &Client, ns: &str, name: &str) -> Result<()> 
     let ar = ApiResource::from_gvk(&gvk);
     let api: Api<DynamicObject> = Api::namespaced_with(client.clone(), ns, &ar);
     if let Ok(Some(_)) = api.get_opt(name).await {
-        api.delete(name, &Default::default()).await.map_err(Error::KubeError)?;
+        api.delete(name, &Default::default())
+            .await
+            .map_err(Error::KubeError)?;
     }
     Ok(())
 }

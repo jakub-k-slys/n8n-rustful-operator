@@ -50,3 +50,45 @@ Feature: n8n operator reconciles Instance custom resources
     When I apply an Instance "both" with both ingress and httpRoute
     Then the Instance "both" never reaches status.ready=true within 15 seconds
     And no Ingress named "both" exists
+
+  Scenario: Default Instance has no database env vars
+    When I apply an Instance "db-default" with image "nginx:alpine"
+    Then a Deployment named "db-default" exists in namespace "default" within 60 seconds
+    And the Deployment "db-default" has no env var "DB_TYPE"
+
+  Scenario: Postgres database wires host, user, schema and password from a Secret
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    When I apply an Instance "pg" with Postgres host "pg.example.com" port 5432 database "n8n" user "n8n" password from secret "pg-creds" key "password" schema "public" pool size 7
+    Then the Deployment "pg" has env var "DB_TYPE" set to "postgresdb"
+    And the Deployment "pg" has env var "DB_POSTGRESDB_HOST" set to "pg.example.com"
+    And the Deployment "pg" has env var "DB_POSTGRESDB_PORT" set to "5432"
+    And the Deployment "pg" has env var "DB_POSTGRESDB_DATABASE" set to "n8n"
+    And the Deployment "pg" has env var "DB_POSTGRESDB_USER" set to "n8n"
+    And the Deployment "pg" has env var "DB_POSTGRESDB_SCHEMA" set to "public"
+    And the Deployment "pg" has env var "DB_POSTGRESDB_POOL_SIZE" set to "7"
+    And the Deployment "pg" sources env var "DB_POSTGRESDB_PASSWORD" from secret "pg-creds" key "password"
+
+  Scenario: Postgres with SSL CA mounts the cert and points env var at the file
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "pg-ca" exists with key "ca.crt" set to "fake-ca-pem"
+    When I apply an Instance "pg-ssl" with Postgres host "pg.example.com" database "n8n" user "n8n" password from secret "pg-creds" key "password" and SSL CA from secret "pg-ca" key "ca.crt"
+    Then the Deployment "pg-ssl" has env var "DB_POSTGRESDB_SSL_ENABLED" set to "true"
+    And the Deployment "pg-ssl" has env var "DB_POSTGRESDB_SSL_CA" set to "/etc/n8n/ssl/ca/ca.crt"
+    And the Deployment "pg-ssl" mounts secret "pg-ca" at "/etc/n8n/ssl/ca/ca.crt"
+
+  Scenario: MySQL database wires host and password Secret
+    Given a Secret "mysql-creds" exists with key "password" set to "s3cret"
+    When I apply an Instance "mysql" with MySQL host "mysql.example.com" port 3306 database "n8n" user "n8n" password from secret "mysql-creds" key "password"
+    Then the Deployment "mysql" has env var "DB_TYPE" set to "mysqldb"
+    And the Deployment "mysql" has env var "DB_MYSQLDB_HOST" set to "mysql.example.com"
+    And the Deployment "mysql" sources env var "DB_MYSQLDB_PASSWORD" from secret "mysql-creds" key "password"
+
+  Scenario: SQLite with persistence provisions a PVC and mounts it at /home/node/.n8n
+    When I apply an Instance "sqlite-pv" with SQLite persistence size "1Gi"
+    Then a PersistentVolumeClaim named "sqlite-pv-data" exists with size "1Gi"
+    And the Deployment "sqlite-pv" mounts pvc "sqlite-pv-data" at "/home/node/.n8n"
+
+  Scenario: Database type mismatch is rejected
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    When I apply an Instance "bad-db" with database type "postgresdb" and only a MySQL config
+    Then the Instance "bad-db" never reaches status.ready=true within 15 seconds

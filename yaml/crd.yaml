@@ -26,6 +26,219 @@ spec:
               The reconciler creates a Deployment and Service for each instance and reports
               readiness back through the resource status.
             properties:
+              database:
+                description: Database backend configuration. Omit for n8n's sqlite default with no extra env vars.
+                nullable: true
+                properties:
+                  mysql:
+                    nullable: true
+                    properties:
+                      connectionTimeoutMs:
+                        format: uint32
+                        minimum: 0.0
+                        nullable: true
+                        type: integer
+                      database:
+                        type: string
+                      host:
+                        type: string
+                      passwordSecret:
+                        properties:
+                          key:
+                            default: encryption_key
+                            description: Key within the Secret. Defaults to `encryption_key`.
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      port:
+                        format: int32
+                        nullable: true
+                        type: integer
+                      ssl:
+                        nullable: true
+                        properties:
+                          caSecret:
+                            description: Mount as `/etc/n8n/ssl/ca/ca.crt` and pass via `DB_*_SSL_CA`.
+                            nullable: true
+                            properties:
+                              key:
+                                default: encryption_key
+                                description: Key within the Secret. Defaults to `encryption_key`.
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          certSecret:
+                            nullable: true
+                            properties:
+                              key:
+                                default: encryption_key
+                                description: Key within the Secret. Defaults to `encryption_key`.
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          enabled:
+                            default: false
+                            type: boolean
+                          keySecret:
+                            nullable: true
+                            properties:
+                              key:
+                                default: encryption_key
+                                description: Key within the Secret. Defaults to `encryption_key`.
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          rejectUnauthorized:
+                            nullable: true
+                            type: boolean
+                        type: object
+                      user:
+                        type: string
+                    required:
+                    - database
+                    - host
+                    - passwordSecret
+                    - user
+                    type: object
+                  postgres:
+                    nullable: true
+                    properties:
+                      connectionTimeoutMs:
+                        format: uint32
+                        minimum: 0.0
+                        nullable: true
+                        type: integer
+                      database:
+                        type: string
+                      host:
+                        type: string
+                      passwordSecret:
+                        properties:
+                          key:
+                            default: encryption_key
+                            description: Key within the Secret. Defaults to `encryption_key`.
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      poolSize:
+                        format: uint32
+                        minimum: 0.0
+                        nullable: true
+                        type: integer
+                      port:
+                        format: int32
+                        nullable: true
+                        type: integer
+                      schema:
+                        nullable: true
+                        type: string
+                      ssl:
+                        nullable: true
+                        properties:
+                          caSecret:
+                            description: Mount as `/etc/n8n/ssl/ca/ca.crt` and pass via `DB_*_SSL_CA`.
+                            nullable: true
+                            properties:
+                              key:
+                                default: encryption_key
+                                description: Key within the Secret. Defaults to `encryption_key`.
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          certSecret:
+                            nullable: true
+                            properties:
+                              key:
+                                default: encryption_key
+                                description: Key within the Secret. Defaults to `encryption_key`.
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          enabled:
+                            default: false
+                            type: boolean
+                          keySecret:
+                            nullable: true
+                            properties:
+                              key:
+                                default: encryption_key
+                                description: Key within the Secret. Defaults to `encryption_key`.
+                                type: string
+                              name:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          rejectUnauthorized:
+                            nullable: true
+                            type: boolean
+                        type: object
+                      user:
+                        type: string
+                    required:
+                    - database
+                    - host
+                    - passwordSecret
+                    - user
+                    type: object
+                  sqlite:
+                    nullable: true
+                    properties:
+                      database:
+                        description: Path inside the pod, mapped to `DB_SQLITE_DATABASE`.
+                        nullable: true
+                        type: string
+                      persistence:
+                        description: Mount a PVC at `/home/node/.n8n` so the sqlite file survives pod restarts.
+                        nullable: true
+                        properties:
+                          accessMode:
+                            default: ReadWriteOnce
+                            type: string
+                          size:
+                            description: Storage request, e.g. `1Gi`.
+                            type: string
+                          storageClassName:
+                            nullable: true
+                            type: string
+                        required:
+                        - size
+                        type: object
+                      poolSize:
+                        format: uint32
+                        minimum: 0.0
+                        nullable: true
+                        type: integer
+                      vacuumOnStartup:
+                        nullable: true
+                        type: boolean
+                    type: object
+                  type:
+                    default: sqlite
+                    description: '`sqlite` (default), `postgresdb`, `mysqldb` or `mariadb` — maps directly to `DB_TYPE`.'
+                    type: string
+                type: object
               encryptionKey:
                 description: |-
                   N8N_ENCRYPTION_KEY source. If omitted, the operator generates a Secret

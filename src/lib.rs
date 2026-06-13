@@ -14,8 +14,13 @@ pub enum Error {
     #[error("IllegalInstance")]
     IllegalInstance,
 
-    #[error("ConflictingNetworking: spec.networking.ingress and spec.networking.httpRoute are mutually exclusive")]
+    #[error(
+        "ConflictingNetworking: spec.networking.ingress and spec.networking.httpRoute are mutually exclusive"
+    )]
     ConflictingNetworking,
+
+    #[error("IllegalDatabase: {0}")]
+    IllegalDatabase(String),
 }
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 

@@ -1,7 +1,7 @@
 use cucumber::{World, given, then, when};
 use k8s_openapi::api::{
     apps::v1::Deployment,
-    core::v1::{Secret, Service},
+    core::v1::{PersistentVolumeClaim, Secret, Service},
     networking::v1::Ingress,
 };
 use kube::{
@@ -9,8 +9,9 @@ use kube::{
     api::{Api, DeleteParams, ObjectMeta, Patch, PatchParams, PostParams, ResourceExt},
 };
 use n8n_rustful_operator::{
-    EncryptionKeySpec, GatewayRef, HttpRouteConfig, IngressConfig, Instance, InstanceSpec,
-    NetworkingSpec, SecretKeyRef, ServiceConfig,
+    DatabaseSpec, DatabaseSsl, EncryptionKeySpec, GatewayRef, HttpRouteConfig, IngressConfig, Instance,
+    InstanceSpec, MysqlConfig, NetworkingSpec, PersistenceConfig, PostgresConfig, SecretKeyRef,
+    ServiceConfig, SqliteConfig,
 };
 use std::{collections::BTreeMap, time::Duration};
 use tokio::time::{Instant, sleep};
@@ -46,6 +47,7 @@ fn base_spec(image: &str) -> InstanceSpec {
         service: None,
         networking: None,
         encryption_key: None,
+        database: None,
     }
 }
 
@@ -85,11 +87,7 @@ async fn cluster_ready(w: &mut E2eWorld) {
         .get("n8n-rustful-operator")
         .await
         .expect("operator deployment not found — is the operator installed?");
-    let ready = dep
-        .status
-        .as_ref()
-        .and_then(|s| s.ready_replicas)
-        .unwrap_or(0);
+    let ready = dep.status.as_ref().and_then(|s| s.ready_replicas).unwrap_or(0);
     assert!(ready >= 1, "operator deployment has no ready replicas");
     w.client = Some(client);
 }
@@ -182,7 +180,9 @@ async fn when_apply_ingress(w: &mut E2eWorld, name: String, class: String, host:
     apply_with_spec(w, &name, spec).await;
 }
 
-#[when(regex = r#"^I apply an Instance "([^"]+)" with image "([^"]+)" and encryption key from secret "([^"]+)" key "([^"]+)"$"#)]
+#[when(
+    regex = r#"^I apply an Instance "([^"]+)" with image "([^"]+)" and encryption key from secret "([^"]+)" key "([^"]+)"$"#
+)]
 async fn when_apply_byo_key(
     w: &mut E2eWorld,
     name: String,
@@ -367,13 +367,7 @@ async fn secret_owned(w: &mut E2eWorld, secret: String, owner: String) {
 }
 
 #[then(regex = r#"^the Deployment "([^"]+)" sources env var "([^"]+)" from secret "([^"]+)" key "([^"]+)"$"#)]
-async fn deployment_env(
-    w: &mut E2eWorld,
-    deployment: String,
-    var: String,
-    secret: String,
-    key: String,
-) {
+async fn deployment_env(w: &mut E2eWorld, deployment: String, var: String, secret: String, key: String) {
     let api: Api<Deployment> = Api::namespaced(w.client().clone(), NS);
     let dep = api.get(&deployment).await.expect("Deployment");
     let containers = dep
@@ -381,10 +375,7 @@ async fn deployment_env(
         .and_then(|s| s.template.spec)
         .map(|s| s.containers)
         .expect("containers");
-    let envs = containers
-        .first()
-        .and_then(|c| c.env.clone())
-        .unwrap_or_default();
+    let envs = containers.first().and_then(|c| c.env.clone()).unwrap_or_default();
     let env = envs
         .iter()
         .find(|e| e.name == var)
@@ -403,7 +394,10 @@ async fn no_secret(w: &mut E2eWorld, name: String) {
     let api: Api<Secret> = Api::namespaced(w.client().clone(), NS);
     // small grace so the operator has a chance to (not) create it
     sleep(Duration::from_secs(3)).await;
-    assert!(api.get_opt(&name).await.unwrap().is_none(), "Secret/{name} unexpectedly exists");
+    assert!(
+        api.get_opt(&name).await.unwrap().is_none(),
+        "Secret/{name} unexpectedly exists"
+    );
 }
 
 #[then(regex = r#"^an Ingress named "([^"]+)" exists with host "([^"]+)" within (\d+) seconds$"#)]
@@ -461,7 +455,302 @@ async fn never_ready(w: &mut E2eWorld, name: String, secs: u64) {
 #[then(regex = r#"^no Ingress named "([^"]+)" exists$"#)]
 async fn no_ingress(w: &mut E2eWorld, name: String) {
     let api: Api<Ingress> = Api::namespaced(w.client().clone(), NS);
-    assert!(api.get_opt(&name).await.unwrap().is_none(), "Ingress/{name} unexpectedly exists");
+    assert!(
+        api.get_opt(&name).await.unwrap().is_none(),
+        "Ingress/{name} unexpectedly exists"
+    );
+}
+
+// ----- database -----
+
+#[allow(clippy::too_many_arguments)]
+#[when(
+    regex = r#"^I apply an Instance "([^"]+)" with Postgres host "([^"]+)" port (\d+) database "([^"]+)" user "([^"]+)" password from secret "([^"]+)" key "([^"]+)" schema "([^"]+)" pool size (\d+)$"#
+)]
+async fn apply_postgres_full(
+    w: &mut E2eWorld,
+    name: String,
+    host: String,
+    port: i32,
+    database: String,
+    user: String,
+    secret: String,
+    key: String,
+    schema: String,
+    pool_size: u32,
+) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.database = Some(DatabaseSpec {
+        type_: "postgresdb".into(),
+        sqlite: None,
+        postgres: Some(PostgresConfig {
+            host,
+            port: Some(port),
+            database,
+            user,
+            password_secret: SecretKeyRef { name: secret, key },
+            schema: Some(schema),
+            ssl: None,
+            pool_size: Some(pool_size),
+            connection_timeout_ms: None,
+        }),
+        mysql: None,
+    });
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[allow(clippy::too_many_arguments)]
+#[when(
+    regex = r#"^I apply an Instance "([^"]+)" with Postgres host "([^"]+)" database "([^"]+)" user "([^"]+)" password from secret "([^"]+)" key "([^"]+)" and SSL CA from secret "([^"]+)" key "([^"]+)"$"#
+)]
+async fn apply_postgres_ssl(
+    w: &mut E2eWorld,
+    name: String,
+    host: String,
+    database: String,
+    user: String,
+    pw_secret: String,
+    pw_key: String,
+    ca_secret: String,
+    ca_key: String,
+) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.database = Some(DatabaseSpec {
+        type_: "postgresdb".into(),
+        sqlite: None,
+        postgres: Some(PostgresConfig {
+            host,
+            port: None,
+            database,
+            user,
+            password_secret: SecretKeyRef {
+                name: pw_secret,
+                key: pw_key,
+            },
+            schema: None,
+            ssl: Some(DatabaseSsl {
+                enabled: true,
+                reject_unauthorized: None,
+                ca_secret: Some(SecretKeyRef {
+                    name: ca_secret,
+                    key: ca_key,
+                }),
+                cert_secret: None,
+                key_secret: None,
+            }),
+            pool_size: None,
+            connection_timeout_ms: None,
+        }),
+        mysql: None,
+    });
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[allow(clippy::too_many_arguments)]
+#[when(
+    regex = r#"^I apply an Instance "([^"]+)" with MySQL host "([^"]+)" port (\d+) database "([^"]+)" user "([^"]+)" password from secret "([^"]+)" key "([^"]+)"$"#
+)]
+async fn apply_mysql(
+    w: &mut E2eWorld,
+    name: String,
+    host: String,
+    port: i32,
+    database: String,
+    user: String,
+    secret: String,
+    key: String,
+) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.database = Some(DatabaseSpec {
+        type_: "mysqldb".into(),
+        sqlite: None,
+        postgres: None,
+        mysql: Some(MysqlConfig {
+            host,
+            port: Some(port),
+            database,
+            user,
+            password_secret: SecretKeyRef { name: secret, key },
+            ssl: None,
+            connection_timeout_ms: None,
+        }),
+    });
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply an Instance "([^"]+)" with SQLite persistence size "([^"]+)"$"#)]
+async fn apply_sqlite_persistence(w: &mut E2eWorld, name: String, size: String) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.database = Some(DatabaseSpec {
+        type_: "sqlite".into(),
+        sqlite: Some(SqliteConfig {
+            pool_size: None,
+            vacuum_on_startup: None,
+            database: None,
+            persistence: Some(PersistenceConfig {
+                size,
+                storage_class_name: None,
+                access_mode: "ReadWriteOnce".into(),
+            }),
+        }),
+        postgres: None,
+        mysql: None,
+    });
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply an Instance "([^"]+)" with database type "([^"]+)" and only a MySQL config$"#)]
+async fn apply_db_type_mismatch(w: &mut E2eWorld, name: String, type_: String) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.database = Some(DatabaseSpec {
+        type_,
+        sqlite: None,
+        postgres: None,
+        mysql: Some(MysqlConfig {
+            host: "wrong.example.com".into(),
+            port: None,
+            database: "n8n".into(),
+            user: "n8n".into(),
+            password_secret: SecretKeyRef {
+                name: "pg-creds".into(),
+                key: "password".into(),
+            },
+            ssl: None,
+            connection_timeout_ms: None,
+        }),
+    });
+    apply_with_spec(w, &name, spec).await;
+}
+
+fn deployment_env_var(dep: &Deployment, var: &str) -> Option<k8s_openapi::api::core::v1::EnvVar> {
+    let containers = dep.spec.as_ref()?.template.spec.as_ref()?.containers.clone();
+    let env = containers.first().and_then(|c| c.env.clone()).unwrap_or_default();
+    env.into_iter().find(|e| e.name == var)
+}
+
+#[then(regex = r#"^the Deployment "([^"]+)" has env var "([^"]+)" set to "([^"]+)"$"#)]
+async fn deployment_env_value(w: &mut E2eWorld, name: String, var: String, expected: String) {
+    let client = w.client().clone();
+    let n = name.clone();
+    let v = var.clone();
+    let exp = expected.clone();
+    wait_until(
+        60,
+        &format!("Deployment/{name} env {var}={expected}"),
+        move || {
+            let client = client.clone();
+            let n = n.clone();
+            let v = v.clone();
+            let exp = exp.clone();
+            async move {
+                let api: Api<Deployment> = Api::namespaced(client, NS);
+                match api.get_opt(&n).await.unwrap() {
+                    Some(d) => deployment_env_var(&d, &v).and_then(|e| e.value) == Some(exp),
+                    None => false,
+                }
+            }
+        },
+    )
+    .await;
+}
+
+#[then(regex = r#"^the Deployment "([^"]+)" has no env var "([^"]+)"$"#)]
+async fn deployment_env_absent(w: &mut E2eWorld, name: String, var: String) {
+    let api: Api<Deployment> = Api::namespaced(w.client().clone(), NS);
+    // Wait a short period so reconciler had a chance to render the Deployment.
+    sleep(Duration::from_secs(2)).await;
+    let dep = api.get(&name).await.expect("Deployment");
+    assert!(
+        deployment_env_var(&dep, &var).is_none(),
+        "env var {var} unexpectedly present"
+    );
+}
+
+#[then(regex = r#"^a PersistentVolumeClaim named "([^"]+)" exists with size "([^"]+)"$"#)]
+async fn pvc_exists(w: &mut E2eWorld, name: String, size: String) {
+    let client = w.client().clone();
+    let n = name.clone();
+    let s = size.clone();
+    wait_until(60, &format!("PVC/{name} size={size}"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        let s = s.clone();
+        async move {
+            let api: Api<PersistentVolumeClaim> = Api::namespaced(client, NS);
+            match api.get_opt(&n).await.unwrap() {
+                Some(p) => {
+                    p.spec
+                        .and_then(|sp| sp.resources)
+                        .and_then(|r| r.requests)
+                        .and_then(|r| r.get("storage").map(|q| q.0.clone()))
+                        == Some(s.clone())
+                }
+                None => false,
+            }
+        }
+    })
+    .await;
+}
+
+#[then(regex = r#"^the Deployment "([^"]+)" mounts pvc "([^"]+)" at "([^"]+)"$"#)]
+async fn deployment_mounts_pvc(w: &mut E2eWorld, name: String, pvc: String, path: String) {
+    let api: Api<Deployment> = Api::namespaced(w.client().clone(), NS);
+    let dep = api.get(&name).await.expect("Deployment");
+    let pod_spec = dep.spec.and_then(|s| s.template.spec).expect("pod spec");
+    let vol = pod_spec
+        .volumes
+        .unwrap_or_default()
+        .into_iter()
+        .find(|v| {
+            v.persistent_volume_claim
+                .as_ref()
+                .map(|p| p.claim_name == pvc)
+                .unwrap_or(false)
+        })
+        .unwrap_or_else(|| panic!("no PVC volume claiming {pvc}"));
+    let containers = pod_spec.containers;
+    let mounts = containers
+        .first()
+        .and_then(|c| c.volume_mounts.clone())
+        .unwrap_or_default();
+    let mount = mounts
+        .into_iter()
+        .find(|m| m.name == vol.name)
+        .unwrap_or_else(|| panic!("no mount for volume {}", vol.name));
+    assert_eq!(mount.mount_path, path);
+}
+
+#[then(regex = r#"^the Deployment "([^"]+)" mounts secret "([^"]+)" at "([^"]+)"$"#)]
+async fn deployment_mounts_secret(w: &mut E2eWorld, name: String, secret: String, path: String) {
+    let api: Api<Deployment> = Api::namespaced(w.client().clone(), NS);
+    let dep = api.get(&name).await.expect("Deployment");
+    let pod_spec = dep.spec.and_then(|s| s.template.spec).expect("pod spec");
+    let vol = pod_spec
+        .volumes
+        .unwrap_or_default()
+        .into_iter()
+        .find(|v| {
+            v.secret
+                .as_ref()
+                .and_then(|s| s.secret_name.as_deref())
+                .map(|n| n == secret)
+                .unwrap_or(false)
+        })
+        .unwrap_or_else(|| panic!("no secret volume referencing {secret}"));
+    let containers = pod_spec.containers;
+    let mount = containers
+        .first()
+        .and_then(|c| c.volume_mounts.clone())
+        .unwrap_or_default()
+        .into_iter()
+        .find(|m| m.name == vol.name)
+        .unwrap_or_else(|| panic!("no mount for volume {}", vol.name));
+    // The mount itself is a directory; the file lives under it.
+    assert!(
+        path.starts_with(&mount.mount_path),
+        "mount path {} doesn't contain {path}",
+        mount.mount_path
+    );
 }
 
 // ----- main -----
