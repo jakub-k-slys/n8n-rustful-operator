@@ -96,6 +96,15 @@ spec:
                 description: Number of replicas of the n8n pod.
                 format: int32
                 type: integer
+              service:
+                description: Service shape. Defaults to ClusterIP (sensible when networking handles ingress).
+                nullable: true
+                properties:
+                  type:
+                    default: ClusterIP
+                    description: '`ClusterIP` (default), `NodePort`, or `LoadBalancer`.'
+                    type: string
+                type: object
             type: object
           status:
             nullable: true

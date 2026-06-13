@@ -56,6 +56,9 @@ pub struct InstanceSpec {
     /// Externally-facing hostname. Required when `networking` is set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
+    /// Service shape. Defaults to ClusterIP (sensible when networking handles ingress).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service: Option<ServiceConfig>,
     /// Expose n8n via an Ingress OR an HTTPRoute. The two are mutually exclusive.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub networking: Option<NetworkingSpec>,
@@ -122,6 +125,17 @@ pub struct SecretKeyRef {
 
 fn default_secret_key() -> String {
     "encryption_key".to_string()
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+pub struct ServiceConfig {
+    /// `ClusterIP` (default), `NodePort`, or `LoadBalancer`.
+    #[serde(default = "default_service_type", rename = "type")]
+    pub type_: String,
+}
+
+fn default_service_type() -> String {
+    "ClusterIP".to_string()
 }
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug, JsonSchema)]
@@ -204,25 +218,49 @@ impl Instance {
             .await
             .map_err(Error::KubeError)?;
 
-        let svc = build_service(&name, &owner);
+        let svc = build_service(&name, &self.spec, &owner);
         services
             .patch(&name, &ps, &Patch::Apply(&svc))
             .await
             .map_err(Error::KubeError)?;
 
-        if let Some(net) = &self.spec.networking {
-            if let Some(ing_cfg) = &net.ingress {
-                let host = self.spec.host.as_deref().unwrap_or("");
-                let ingress = build_ingress(&name, host, ing_cfg, &owner);
-                let api: Api<Ingress> = Api::namespaced(client.clone(), &ns);
-                api.patch(&name, &ps, &Patch::Apply(&ingress))
-                    .await
-                    .map_err(Error::KubeError)?;
-            }
-            if let Some(rt_cfg) = &net.http_route {
-                let host = self.spec.host.as_deref().unwrap_or("");
-                apply_http_route(&client, &ns, &name, host, rt_cfg, &owner, &ps).await?;
-            }
+        let want_ingress = self
+            .spec
+            .networking
+            .as_ref()
+            .and_then(|n| n.ingress.as_ref());
+        let want_route = self
+            .spec
+            .networking
+            .as_ref()
+            .and_then(|n| n.http_route.as_ref());
+
+        let ingress_api: Api<Ingress> = Api::namespaced(client.clone(), &ns);
+        if let Some(ing_cfg) = want_ingress {
+            let host = self.spec.host.as_deref().unwrap_or("");
+            let ingress = build_ingress(&name, host, ing_cfg, &owner);
+            ingress_api
+                .patch(&name, &ps, &Patch::Apply(&ingress))
+                .await
+                .map_err(Error::KubeError)?;
+        } else if ingress_api
+            .get_opt(&name)
+            .await
+            .map_err(Error::KubeError)?
+            .is_some()
+        {
+            ingress_api
+                .delete(&name, &Default::default())
+                .await
+                .map_err(Error::KubeError)?;
+        }
+
+        if let Some(rt_cfg) = want_route {
+            let host = self.spec.host.as_deref().unwrap_or("");
+            apply_http_route(&client, &ns, &name, host, rt_cfg, &owner, &ps).await?;
+        } else {
+            // Best-effort delete; ignore errors if the Gateway API CRD isn't installed.
+            let _ = delete_http_route(&client, &ns, &name).await;
         }
 
         ctx.recorder
@@ -391,8 +429,13 @@ fn build_deployment(
     serde_json::from_value(dep_json).expect("static deployment schema is valid")
 }
 
-fn build_service(name: &str, owner: &OwnerReference) -> Service {
+fn build_service(name: &str, spec: &InstanceSpec, owner: &OwnerReference) -> Service {
     let labels = selector(name);
+    let svc_type = spec
+        .service
+        .as_ref()
+        .map(|s| s.type_.clone())
+        .unwrap_or_else(default_service_type);
     Service {
         metadata: ObjectMeta {
             name: Some(name.to_string()),
@@ -409,7 +452,7 @@ fn build_service(name: &str, owner: &OwnerReference) -> Service {
                 protocol: Some("TCP".to_string()),
                 ..Default::default()
             }]),
-            type_: Some("ClusterIP".to_string()),
+            type_: Some(svc_type),
             ..Default::default()
         }),
         ..Default::default()
@@ -447,6 +490,16 @@ fn build_ingress(name: &str, host: &str, cfg: &IngressConfig, owner: &OwnerRefer
         "spec": spec,
     });
     serde_json::from_value(json).expect("static ingress schema is valid")
+}
+
+async fn delete_http_route(client: &Client, ns: &str, name: &str) -> Result<()> {
+    let gvk = GroupVersionKind::gvk("gateway.networking.k8s.io", "v1", "HTTPRoute");
+    let ar = ApiResource::from_gvk(&gvk);
+    let api: Api<DynamicObject> = Api::namespaced_with(client.clone(), ns, &ar);
+    if let Ok(Some(_)) = api.get_opt(name).await {
+        api.delete(name, &Default::default()).await.map_err(Error::KubeError)?;
+    }
+    Ok(())
 }
 
 async fn apply_http_route(
