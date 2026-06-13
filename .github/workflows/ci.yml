@@ -1,11 +1,11 @@
-name: ci
+name: Pull request checks
 
 on:
   pull_request:
     branches: [main]
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: pr-checks-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -13,65 +13,84 @@ env:
   RUSTFLAGS: -Dwarnings
 
 jobs:
-  fmt:
-    name: rustfmt (nightly)
+  rustfmt:
+    name: Format (nightly rustfmt)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@nightly
+      - name: Check out source
+        uses: actions/checkout@v6
+      - name: Install nightly toolchain with rustfmt
+        uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
-      - run: cargo +nightly fmt --all -- --check
+      - name: Verify formatting
+        run: cargo +nightly fmt --all -- --check
 
   clippy:
-    name: clippy
+    name: Lint (clippy)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Check out source
+        uses: actions/checkout@v6
+      - name: Install stable toolchain with clippy
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Restore cargo cache
+        uses: Swatinem/rust-cache@v2
+      - name: Run clippy (warnings = failure)
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
-  test:
-    name: build + test
+  unit_tests:
+    name: Build and unit tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo build --all-features --verbose
-      - run: cargo test --all-features --verbose
+      - name: Check out source
+        uses: actions/checkout@v6
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Restore cargo cache
+        uses: Swatinem/rust-cache@v2
+      - name: Compile crate
+        run: cargo build --all-features --verbose
+      - name: Run cargo test
+        run: cargo test --all-features --verbose
 
-  crd-up-to-date:
-    name: crd up-to-date
+  crd_drift:
+    name: CRD yaml drift check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: regenerate yaml/crd.yaml
+      - name: Check out source
+        uses: actions/checkout@v6
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Restore cargo cache
+        uses: Swatinem/rust-cache@v2
+      - name: Re-render yaml/crd.yaml from source
         run: cargo run --bin crdgen > yaml/crd.yaml
-      - name: fail if regeneration produced a diff
+      - name: Fail if checked-in CRD is stale
         run: git diff --exit-code -- yaml/crd.yaml
 
-  semver-check:
-    name: cargo semver-checks
+  semver_checks:
+    name: Public API semver
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - name: Check out source (full history)
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: obi1kenobi/cargo-semver-checks-action@v2
+      - name: Diff public API against PR base
+        uses: obi1kenobi/cargo-semver-checks-action@v2
         with:
           baseline-rev: ${{ github.event.pull_request.base.sha }}
 
   audit:
-    name: cargo audit
+    name: Dependency security audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: rustsec/audit-check@v2.0.0
+      - name: Check out source
+        uses: actions/checkout@v6
+      - name: Run cargo audit
+        uses: rustsec/audit-check@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

@@ -1,10 +1,11 @@
-name: e2e
+name: End-to-end BDD tests
 
 on:
-  # workflow_run fires for every docker workflow completion, including ones
-  # triggered by GITHUB_TOKEN — unlike registry_package which is unreliable.
+  # workflow_run fires for every "Publish container image" completion,
+  # including ones triggered by GITHUB_TOKEN, unlike registry_package
+  # which is unreliable.
   workflow_run:
-    workflows: [docker]
+    workflows: [Publish container image]
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -22,18 +23,18 @@ env:
   TEST_INSTANCE_IMAGE: nginx:alpine
 
 jobs:
-  smoke:
-    name: kind smoke test
+  bdd_in_kind:
+    name: Run BDD scenarios against a kind-loaded image
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
     steps:
-      - uses: actions/checkout@v6
-        # Check out main (latest BDD assertions, exercising the released image).
+      - name: Check out source (main) for the latest BDD assertions
+        uses: actions/checkout@v6
 
-      - name: resolve image tag
+      - name: Resolve image tag for this run
         id: tag
         env:
           MANUAL: ${{ github.event.inputs.tag }}
@@ -51,43 +52,97 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/login-action@v3
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: pull ghcr image
+      - name: Pull operator image freshly published to ghcr.io
         run: docker pull "${{ env.IMAGE }}:${{ steps.tag.outputs.version }}"
 
-      - name: create kind cluster
+      - name: Spin up an ephemeral kind cluster
         uses: helm/kind-action@v1
         with:
           cluster_name: n8n-e2e
           wait: 120s
 
-      - name: load image into kind
+      - name: Side-load image into the kind cluster
         run: kind load docker-image "${{ env.IMAGE }}:${{ steps.tag.outputs.version }}" --name n8n-e2e
 
-      - name: install CRD
+      - name: Apply CRD to the cluster
         run: kubectl apply -f yaml/crd.yaml
 
-      - name: install operator (pinned to tested tag, imagePullPolicy Never)
+      - name: Install operator (pinned tag, imagePullPolicy=Never)
         run: |
           sed -e "s|__IMAGE_TAG__|${{ steps.tag.outputs.version }}|g" \
               -e "s|imagePullPolicy: IfNotPresent|imagePullPolicy: Never|g" \
               yaml/install.yaml | kubectl apply -f -
           kubectl -n n8n-operator rollout status deployment/n8n-rustful-operator --timeout=120s
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Restore cargo cache
+        uses: Swatinem/rust-cache@v2
 
-      - name: run cucumber BDD suite
-        run: cargo test --test cucumber --release
+      - name: Execute cucumber-rs BDD suite
+        id: bdd
+        run: |
+          set +e
+          cargo test --test cucumber --release 2>&1 | tee /tmp/bdd.log
+          status="${PIPESTATUS[0]}"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
-      - name: dump operator logs on failure
-        if: failure()
+      - name: Render per-scenario summary into the run page
+        if: always()
+        run: |
+          {
+            echo "## BDD scenario results"
+            echo ""
+            echo "Image tested: \`${IMAGE}:${{ steps.tag.outputs.version }}\`"
+            echo ""
+            echo "| Status | Feature | Scenario |"
+            echo "| --- | --- | --- |"
+            awk '
+              /^Feature:/ {
+                sub(/^Feature:[[:space:]]*/, "")
+                feature = $0
+                next
+              }
+              /^[[:space:]]+Scenario:/ {
+                if (scen != "") {
+                  printf "| %s | %s | %s |\n", (failed ? "❌" : "✅"), prev_feature, scen
+                }
+                line = $0
+                sub(/^[[:space:]]+Scenario:[[:space:]]*/, "", line)
+                scen = line
+                prev_feature = feature
+                failed = 0
+                next
+              }
+              /✘/ { failed = 1 }
+              END {
+                if (scen != "") {
+                  printf "| %s | %s | %s |\n", (failed ? "❌" : "✅"), prev_feature, scen
+                }
+              }
+            ' /tmp/bdd.log
+            echo ""
+            totals=$(grep -E "^[0-9]+ scenarios" /tmp/bdd.log | tail -1 || true)
+            steps_=$(grep -E "^[0-9]+ steps"     /tmp/bdd.log | tail -1 || true)
+            if [ -n "$totals" ]; then echo "**Scenarios:** $totals"; fi
+            if [ -n "$steps_"  ]; then echo "**Steps:** $steps_"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Dump operator logs and recent events on failure
+        if: failure() || steps.bdd.outputs.status != '0'
         run: |
           kubectl -n n8n-operator logs deployment/n8n-rustful-operator --tail=200 || true
           kubectl get events -A --sort-by=.lastTimestamp | tail -50 || true
+
+      - name: Re-raise BDD failure
+        if: always()
+        run: exit ${{ steps.bdd.outputs.status }}

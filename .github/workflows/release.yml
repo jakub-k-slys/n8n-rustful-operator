@@ -1,4 +1,4 @@
-name: release
+name: Tag and release
 
 on:
   push:
@@ -18,43 +18,47 @@ env:
   IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
-  release:
-    name: tag + github release
+  cut_release:
+    name: Bump version, tag and publish GitHub Release
     runs-on: ubuntu-latest
     outputs:
       new_tag: ${{ steps.bump.outputs.new_tag || steps.manual.outputs.tag }}
       new_version: ${{ steps.bump.outputs.new_version || steps.manual.outputs.version }}
     steps:
-      - uses: actions/create-github-app-token@v3
+      - name: Mint a GitHub App installation token
+        # Required so the tag and release events fan out into downstream
+        # workflows — GITHUB_TOKEN-triggered events do not.
+        uses: actions/create-github-app-token@v3
         id: app-token
         with:
           client-id: ${{ secrets.CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      - uses: actions/checkout@v6
+      - name: Check out source (full history for tag-action)
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      - id: bump
+      - name: Compute next semver tag from conventional commits
+        id: bump
         if: github.event.inputs.tag == ''
         uses: mathieudutour/github-tag-action@v6.2
         with:
-          # App token so the pushed tag triggers downstream workflows
-          # (a tag pushed by GITHUB_TOKEN is silently ignored by GHA).
           github_token: ${{ steps.app-token.outputs.token }}
           default_bump: false
           release_branches: main
           tag_prefix: v
 
-      - id: manual
+      - name: Use manually supplied tag
+        id: manual
         if: github.event.inputs.tag != ''
         run: |
           tag="${{ github.event.inputs.tag }}"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
-      - name: stop if no new tag
+      - name: Short-circuit if there is nothing to release
         id: gate
         run: |
           tag="${{ steps.bump.outputs.new_tag || steps.manual.outputs.tag }}"
@@ -63,17 +67,19 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install stable toolchain
         if: steps.gate.outputs.skip != 'true'
+        uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Restore cargo cache
         if: steps.gate.outputs.skip != 'true'
+        uses: Swatinem/rust-cache@v2
 
-      - name: regenerate CRD
+      - name: Re-render CRD yaml from source
         if: steps.gate.outputs.skip != 'true'
         run: cargo run --bin crdgen > yaml/crd.yaml
 
-      - name: stage manifests with pinned image tag
+      - name: Stage install manifests with the new image tag pinned
         if: steps.gate.outputs.skip != 'true'
         run: |
           version="${{ steps.bump.outputs.new_version || steps.manual.outputs.version }}"
@@ -86,16 +92,16 @@ jobs:
           cat dist/install.yaml >> "dist/n8n-rustful-operator-${version}.yaml"
           sha256sum dist/*.yaml > dist/SHA256SUMS
 
-      - uses: softprops/action-gh-release@v2
+      - name: Publish GitHub Release with manifests
         if: steps.gate.outputs.skip != 'true'
+        uses: softprops/action-gh-release@v2
         with:
-          # App token so the `release: published` event triggers docker.yml.
           token: ${{ steps.app-token.outputs.token }}
           tag_name: ${{ steps.bump.outputs.new_tag || steps.manual.outputs.tag }}
           name: ${{ steps.bump.outputs.new_tag || steps.manual.outputs.tag }}
           body: |
             Container image: `${{ env.IMAGE }}:${{ steps.bump.outputs.new_version || steps.manual.outputs.version }}`
-            (built by the docker workflow that runs right after this release.)
+            (built by the "Publish container image" workflow that runs right after this release.)
 
             Install:
             ```sh
