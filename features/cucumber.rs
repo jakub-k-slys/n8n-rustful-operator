@@ -6,7 +6,7 @@ use k8s_openapi::api::{
 };
 use kube::{
     Client,
-    api::{Api, DeleteParams, ObjectMeta, Patch, PatchParams, PostParams, ResourceExt},
+    api::{Api, DeleteParams, ObjectMeta, Patch, PatchParams, ResourceExt},
 };
 use n8n_rustful_operator::{
     DatabaseSpec, DatabaseSsl, EncryptionKeySpec, GatewayRef, HttpRouteConfig, IngressConfig, Instance,
@@ -142,14 +142,10 @@ async fn create_secret(w: &mut E2eWorld, name: String, key: String, value: Strin
         type_: Some("Opaque".to_string()),
         ..Default::default()
     };
-    // upsert: create or replace
-    if api.get_opt(&name).await.unwrap().is_some() {
-        api.delete(&name, &DeleteParams::default()).await.ok();
-        sleep(Duration::from_millis(200)).await;
-    }
-    api.create(&PostParams::default(), &secret)
+    let ssa = PatchParams::apply("cucumber").force();
+    api.patch(&name, &ssa, &Patch::Apply(&secret))
         .await
-        .expect("create Secret");
+        .expect("upsert Secret");
 }
 
 // ----- When -----
@@ -260,28 +256,44 @@ async fn deployment_exists(w: &mut E2eWorld, name: String, ns: String, secs: u64
 
 #[then(regex = r#"^a Service named "([^"]+)" exposes port (\d+)$"#)]
 async fn service_exposes_port(w: &mut E2eWorld, name: String, port: i32) {
-    let api: Api<Service> = Api::namespaced(w.client().clone(), NS);
-    let svc = api.get(&name).await.expect("Service not found");
-    let p = svc
-        .spec
-        .as_ref()
-        .and_then(|s| s.ports.as_ref())
-        .and_then(|ports| ports.first())
-        .map(|port| port.port)
-        .expect("no port on Service");
-    assert_eq!(p, port);
+    let client = w.client().clone();
+    let n = name.clone();
+    wait_until(60, &format!("Service/{name} port={port}"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        async move {
+            let api: Api<Service> = Api::namespaced(client, NS);
+            match api.get_opt(&n).await.unwrap() {
+                Some(svc) => svc
+                    .spec
+                    .and_then(|s| s.ports)
+                    .and_then(|ports| ports.first().map(|p| p.port))
+                    == Some(port),
+                None => false,
+            }
+        }
+    })
+    .await;
 }
 
 #[then(regex = r#"^the Service "([^"]+)" has type "([^"]+)"$"#)]
 async fn service_has_type(w: &mut E2eWorld, name: String, expected: String) {
-    let api: Api<Service> = Api::namespaced(w.client().clone(), NS);
-    let svc = api.get(&name).await.expect("Service");
-    let ty = svc
-        .spec
-        .as_ref()
-        .and_then(|s| s.type_.clone())
-        .expect("no service type");
-    assert_eq!(ty, expected);
+    let client = w.client().clone();
+    let n = name.clone();
+    let exp = expected.clone();
+    wait_until(60, &format!("Service/{name} type={expected}"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        let exp = exp.clone();
+        async move {
+            let api: Api<Service> = Api::namespaced(client, NS);
+            match api.get_opt(&n).await.unwrap() {
+                Some(svc) => svc.spec.and_then(|s| s.type_) == Some(exp),
+                None => false,
+            }
+        }
+    })
+    .await;
 }
 
 #[then(regex = r#"^the Instance "([^"]+)" has status.ready set to true within (\d+) seconds$"#)]
@@ -368,25 +380,34 @@ async fn secret_owned(w: &mut E2eWorld, secret: String, owner: String) {
 
 #[then(regex = r#"^the Deployment "([^"]+)" sources env var "([^"]+)" from secret "([^"]+)" key "([^"]+)"$"#)]
 async fn deployment_env(w: &mut E2eWorld, deployment: String, var: String, secret: String, key: String) {
-    let api: Api<Deployment> = Api::namespaced(w.client().clone(), NS);
-    let dep = api.get(&deployment).await.expect("Deployment");
-    let containers = dep
-        .spec
-        .and_then(|s| s.template.spec)
-        .map(|s| s.containers)
-        .expect("containers");
-    let envs = containers.first().and_then(|c| c.env.clone()).unwrap_or_default();
-    let env = envs
-        .iter()
-        .find(|e| e.name == var)
-        .unwrap_or_else(|| panic!("env var {var} not found"));
-    let secret_ref = env
-        .value_from
-        .as_ref()
-        .and_then(|v| v.secret_key_ref.as_ref())
-        .expect("env var not sourced from a secret");
-    assert_eq!(secret_ref.name, secret, "secret name mismatch");
-    assert_eq!(secret_ref.key, key, "secret key mismatch");
+    let client = w.client().clone();
+    let d = deployment.clone();
+    let v = var.clone();
+    let s = secret.clone();
+    let k = key.clone();
+    wait_until(
+        60,
+        &format!("Deployment/{deployment} env {var} ← secret {secret}/{key}"),
+        move || {
+            let client = client.clone();
+            let d = d.clone();
+            let v = v.clone();
+            let s = s.clone();
+            let k = k.clone();
+            async move {
+                let api: Api<Deployment> = Api::namespaced(client, NS);
+                let Some(dep) = api.get_opt(&d).await.unwrap() else {
+                    return false;
+                };
+                let env = deployment_env_var(&dep, &v);
+                env.and_then(|e| e.value_from)
+                    .and_then(|vf| vf.secret_key_ref)
+                    .map(|r| r.name == s && r.key == k)
+                    .unwrap_or(false)
+            }
+        },
+    )
+    .await;
 }
 
 #[then(regex = r#"^no Secret named "([^"]+)" exists$"#)]
