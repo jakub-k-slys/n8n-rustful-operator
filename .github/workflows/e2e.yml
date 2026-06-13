@@ -1,8 +1,11 @@
 name: e2e
 
 on:
-  registry_package:
-    types: [published, updated]
+  # workflow_run fires for every docker workflow completion, including ones
+  # triggered by GITHUB_TOKEN — unlike registry_package which is unreliable.
+  workflow_run:
+    workflows: [docker]
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
@@ -23,33 +26,30 @@ jobs:
     name: kind smoke test
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Skip registry_package events that aren't for our operator image
-    # (e.g. cache packages, other artifacts).
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.registry_package.package_type == 'container' &&
-       github.event.registry_package.name == github.event.repository.name)
+      github.event.workflow_run.conclusion == 'success'
     steps:
+      - uses: actions/checkout@v6
+        # Check out main (latest BDD assertions, exercising the released image).
+
       - name: resolve image tag
         id: tag
         env:
           MANUAL: ${{ github.event.inputs.tag }}
-          PKG_VERSION_NAME: ${{ github.event.registry_package.package_version.container_metadata.tag.name }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           if [ -n "$MANUAL" ]; then
             tag="$MANUAL"
-          elif [ -n "$PKG_VERSION_NAME" ] && [ "$PKG_VERSION_NAME" != "latest" ]; then
-            tag="v$PKG_VERSION_NAME"
           else
-            echo "no usable tag in event payload"; exit 1
+            git fetch --tags --quiet origin
+            tag=$(git tag --points-at "$HEAD_SHA" | grep '^v' | sort -V | tail -1 || true)
+            if [ -z "$tag" ]; then
+              echo "no release tag at $HEAD_SHA — nothing to test"; exit 1
+            fi
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/checkout@v6
-        # Check out the current default branch (main), NOT the release tag.
-        # The BDD suite describes the operator's contract and may evolve after
-        # a release; we want the latest assertions exercising the released image.
 
       - uses: docker/login-action@v3
         with:
