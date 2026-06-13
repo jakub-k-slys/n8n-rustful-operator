@@ -37,6 +37,8 @@ async fn apply_instance(w: &mut E2eWorld, name: &str, image: &str) {
             image: image.into(),
             replicas: 1,
             host: Some("e2e.example.com".into()),
+            networking: None,
+            encryption_key: None,
         },
     );
     let ssa = PatchParams::apply("cucumber").force();

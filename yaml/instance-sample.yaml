@@ -7,3 +7,18 @@ spec:
   image: n8nio/n8n:latest
   replicas: 1
   host: n8n.example.com
+  # Networking (pick at most one of `ingress` or `httpRoute`):
+  # networking:
+  #   ingress:
+  #     className: nginx
+  #     tlsSecretName: n8n-tls
+  # networking:
+  #   httpRoute:
+  #     gateway:
+  #       name: gateway-main
+  #       namespace: gateway-system
+  # Encryption key: omit the block entirely to auto-generate `<name>-encryption-key`.
+  # encryptionKey:
+  #   secretRef:
+  #     name: my-n8n-secrets
+  #     key: encryption_key

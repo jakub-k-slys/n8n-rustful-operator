@@ -26,14 +26,71 @@ spec:
               The reconciler creates a Deployment and Service for each instance and reports
               readiness back through the resource status.
             properties:
+              encryptionKey:
+                description: |-
+                  N8N_ENCRYPTION_KEY source. If omitted, the operator generates a Secret
+                  `<instance>-encryption-key` and owns it via ownerReference.
+                nullable: true
+                properties:
+                  secretRef:
+                    description: |-
+                      Reference to an existing Secret. Mutually exclusive with auto-generation
+                      (omit the whole `encryptionKey` block to auto-generate).
+                    nullable: true
+                    properties:
+                      key:
+                        default: encryption_key
+                        description: Key within the Secret. Defaults to `encryption_key`.
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
               host:
-                description: Optional externally-facing host. Surfaced in status for observability.
+                description: Externally-facing hostname. Required when `networking` is set.
                 nullable: true
                 type: string
               image:
                 default: n8nio/n8n:latest
                 description: Container image to deploy (e.g. `n8nio/n8n:1.70.0`).
                 type: string
+              networking:
+                description: Expose n8n via an Ingress OR an HTTPRoute. The two are mutually exclusive.
+                nullable: true
+                properties:
+                  httpRoute:
+                    description: Provision a `gateway.networking.k8s.io/v1` HTTPRoute. Mutually exclusive with `ingress`.
+                    nullable: true
+                    properties:
+                      gateway:
+                        description: Gateway to attach this HTTPRoute to (parentRefs[0]).
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            nullable: true
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - gateway
+                    type: object
+                  ingress:
+                    description: Provision a `networking.k8s.io/v1` Ingress. Mutually exclusive with `httpRoute`.
+                    nullable: true
+                    properties:
+                      className:
+                        nullable: true
+                        type: string
+                      tlsSecretName:
+                        description: Name of a TLS Secret in the same namespace. If set, terminates TLS on the Ingress.
+                        nullable: true
+                        type: string
+                    type: object
+                type: object
               replicas:
                 default: 1
                 description: Number of replicas of the n8n pod.
@@ -43,6 +100,10 @@ spec:
           status:
             nullable: true
             properties:
+              encryptionKeySecret:
+                description: Name of the Secret used as N8N_ENCRYPTION_KEY (managed or referenced).
+                nullable: true
+                type: string
               ready:
                 type: boolean
               replicas:
