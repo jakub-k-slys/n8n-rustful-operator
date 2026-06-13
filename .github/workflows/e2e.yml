@@ -47,8 +47,9 @@ jobs:
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v6
-        with:
-          ref: ${{ steps.tag.outputs.tag }}
+        # Check out the current default branch (main), NOT the release tag.
+        # The BDD suite describes the operator's contract and may evolve after
+        # a release; we want the latest assertions exercising the released image.
 
       - uses: docker/login-action@v3
         with:
