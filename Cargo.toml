@@ -50,3 +50,11 @@ jiff = "0.2.28"
 [dependencies.kube]
 features = ["runtime", "client", "derive"]
 version = "3"
+
+[dev-dependencies]
+cucumber = "0.23"
+
+[[test]]
+name = "cucumber"
+harness = false
+

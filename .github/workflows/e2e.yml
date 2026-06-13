@@ -78,53 +78,12 @@ jobs:
               yaml/install.yaml | kubectl apply -f -
           kubectl -n n8n-operator rollout status deployment/n8n-rustful-operator --timeout=120s
 
-      - name: apply Instance
-        run: |
-          cat <<EOF | kubectl apply -f -
-          apiVersion: n8n.slys.dev/v1
-          kind: Instance
-          metadata:
-            name: e2e
-            namespace: default
-          spec:
-            image: ${{ env.TEST_INSTANCE_IMAGE }}
-            replicas: 1
-            host: e2e.example.com
-          EOF
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: wait for child Deployment to be created
-        run: |
-          for i in {1..60}; do
-            if kubectl -n default get deployment/e2e >/dev/null 2>&1; then break; fi
-            echo "waiting for deployment/e2e ($i)…"; sleep 2
-          done
-          kubectl -n default get deployment/e2e -o yaml | head -40
+      - uses: Swatinem/rust-cache@v2
 
-      - name: assert child Service exists on port 5678
-        run: |
-          kubectl -n default get svc/e2e -o jsonpath='{.spec.ports[0].port}' | grep -q '^5678$'
-
-      - name: assert Instance status was patched
-        run: |
-          for i in {1..15}; do
-            ready=$(kubectl -n default get instance/e2e -o jsonpath='{.status.ready}' 2>/dev/null || true)
-            if [ "$ready" = "true" ]; then echo "status.ready=true"; exit 0; fi
-            echo "waiting for status.ready ($i): got '$ready'"; sleep 2
-          done
-          kubectl -n default get instance/e2e -o yaml
-          exit 1
-
-      - name: assert operator finalizer is set
-        run: |
-          kubectl -n default get instance/e2e -o jsonpath='{.metadata.finalizers}' \
-            | grep -q 'instances.n8n.slys.dev'
-
-      - name: delete Instance and check cleanup
-        run: |
-          kubectl -n default delete instance/e2e --wait=true --timeout=60s
-          if kubectl -n default get instance/e2e 2>/dev/null; then
-            echo "instance still present after delete" >&2; exit 1
-          fi
+      - name: run cucumber BDD suite
+        run: cargo test --test cucumber --release -- --tags '~@skip'
 
       - name: dump operator logs on failure
         if: failure()
