@@ -92,3 +92,21 @@ Feature: n8n operator reconciles Instance custom resources
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"
     When I apply an Instance "bad-db" with database type "postgresdb" and only a MySQL config
     Then the Instance "bad-db" never reaches status.ready=true within 15 seconds
+
+  Scenario: Two Instances in the same namespace get independent children
+    When I apply an Instance "alpha" with image "nginx:alpine"
+    And I apply an Instance "beta" with image "nginx:alpine"
+    Then a Deployment named "alpha" exists in namespace "default" within 60 seconds
+    And a Deployment named "beta" exists in namespace "default" within 60 seconds
+    And the Deployment "alpha" pods select on label "app.kubernetes.io/instance=alpha"
+    And the Deployment "beta" pods select on label "app.kubernetes.io/instance=beta"
+    And a Secret named "alpha-encryption-key" exists
+    And a Secret named "beta-encryption-key" exists
+
+  Scenario: Deleting one Instance leaves the other untouched
+    Given an Instance "stayer" exists
+    And an Instance "leaver" exists
+    When I delete the Instance "leaver"
+    Then the Instance "leaver" is gone within 60 seconds
+    And a Deployment named "stayer" exists in namespace "default" within 5 seconds
+    And a Secret named "stayer-encryption-key" exists

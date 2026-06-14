@@ -774,6 +774,35 @@ async fn deployment_mounts_secret(w: &mut E2eWorld, name: String, secret: String
     );
 }
 
+#[then(regex = r#"^the Deployment "([^"]+)" pods select on label "([^=]+)=([^"]+)"$"#)]
+async fn deployment_selects_label(w: &mut E2eWorld, name: String, key: String, value: String) {
+    let api: Api<Deployment> = Api::namespaced(w.client().clone(), NS);
+    let dep = api.get(&name).await.expect("Deployment");
+    let selector = dep
+        .spec
+        .and_then(|s| s.selector.match_labels)
+        .expect("Deployment.spec.selector.matchLabels missing");
+    let got = selector
+        .get(&key)
+        .unwrap_or_else(|| panic!("selector has no label {key}"));
+    assert_eq!(got, &value, "selector {key} mismatch");
+}
+
+#[then(regex = r#"^a Secret named "([^"]+)" exists$"#)]
+async fn secret_exists(w: &mut E2eWorld, name: String) {
+    let client = w.client().clone();
+    let n = name.clone();
+    wait_until(60, &format!("Secret/{name} to appear"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        async move {
+            let api: Api<Secret> = Api::namespaced(client, NS);
+            api.get_opt(&n).await.unwrap().is_some()
+        }
+    })
+    .await;
+}
+
 // ----- main -----
 
 #[tokio::main]
