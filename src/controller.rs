@@ -69,6 +69,10 @@ pub struct SingleSpec {
     /// Database backend configuration. Omit for n8n's sqlite default with no extra env vars.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub database: Option<DatabaseSpec>,
+    /// Mount a PVC at `/home/node/.n8n` so the sqlite file, binary data and runtime
+    /// nodes survive pod restarts. Useful regardless of DB type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub persistence: Option<PersistenceConfig>,
 }
 
 fn default_image() -> String {
@@ -198,9 +202,6 @@ pub struct SqliteConfig {
     /// Path inside the pod, mapped to `DB_SQLITE_DATABASE`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub database: Option<String>,
-    /// Mount a PVC at `/home/node/.n8n` so the sqlite file survives pod restarts.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub persistence: Option<PersistenceConfig>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
@@ -307,6 +308,10 @@ pub struct MainConfig {
     pub service: Option<ServiceConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub networking: Option<NetworkingSpec>,
+    /// Mount a PVC at `/home/node/.n8n` on the main pod only. Workers and webhooks
+    /// stay stateless (use DB and S3 for binary data instead).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub persistence: Option<PersistenceConfig>,
 }
 fn default_main_replicas() -> i32 {
     1
@@ -434,14 +439,17 @@ impl Single {
         let instances: Api<Single> = Api::namespaced(client.clone(), &ns);
         let pvcs: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), &ns);
 
-        if let Some(pvc) = build_data_pvc(&name, &self.spec.image, self.spec.database.as_ref(), &owner) {
-            pvcs.patch(
-                pvc.metadata.name.as_deref().unwrap_or(&name),
-                &ps,
-                &Patch::Apply(&pvc),
-            )
-            .await
-            .map_err(Error::KubeError)?;
+        let pvc_name = format!("{name}-data");
+        if let Some(pvc) = build_data_pvc(
+            &pvc_name,
+            &name,
+            &self.spec.image,
+            self.spec.persistence.as_ref(),
+            &owner,
+        ) {
+            pvcs.patch(&pvc_name, &ps, &Patch::Apply(&pvc))
+                .await
+                .map_err(Error::KubeError)?;
         }
 
         let dep = build_deployment(&name, &self.spec, &key_secret, &owner);
@@ -647,6 +655,7 @@ impl Cluster {
         let services: Api<Service> = Api::namespaced(client.clone(), &ns);
         let ingresses: Api<Ingress> = Api::namespaced(client.clone(), &ns);
         let clusters: Api<Cluster> = Api::namespaced(client.clone(), &ns);
+        let pvcs: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), &ns);
 
         // ----- Main role -----
         let main_name = format!("{name}-main");
@@ -656,14 +665,33 @@ impl Cluster {
             .image
             .clone()
             .unwrap_or_else(|| self.spec.image.clone());
+        let main_pvc_name = format!("{main_name}-data");
+        if let Some(pvc) = build_data_pvc(
+            &main_pvc_name,
+            &main_name,
+            &main_image,
+            self.spec.main.persistence.as_ref(),
+            &owner,
+        ) {
+            pvcs.patch(&main_pvc_name, &ps, &Patch::Apply(&pvc))
+                .await
+                .map_err(Error::KubeError)?;
+        }
+        let mut main_vols = common_vols.clone();
+        let mut main_mounts = common_mounts.clone();
+        if self.spec.main.persistence.is_some() {
+            let (v, m) = build_persistence_volume(&main_pvc_name);
+            main_vols.push(v);
+            main_mounts.push(m);
+        }
         let main_dep = build_cluster_deployment(
             &main_name,
             &main_image,
             "main",
             self.spec.main.replicas,
             &common_env,
-            &common_vols,
-            &common_mounts,
+            &main_vols,
+            &main_mounts,
             None,
             &owner,
         );
@@ -1133,6 +1161,12 @@ fn build_deployment(
         mounts.extend(vm);
     }
 
+    if spec.persistence.is_some() {
+        let (v, m) = build_persistence_volume(&format!("{name}-data"));
+        volumes.push(v);
+        mounts.push(m);
+    }
+
     let dep_json = json!({
         "apiVersion": "apps/v1",
         "kind": "Deployment",
@@ -1332,17 +1366,16 @@ fn build_db_volumes(instance: &str, db: &DatabaseSpec) -> (Vec<serde_json::Value
                 .push(json!({ "name": "n8n-db-ssl-key", "mountPath": "/etc/n8n/ssl/key", "readOnly": true }));
         }
     }
-    if let Some(sq) = db.sqlite.as_ref()
-        && sq.persistence.is_some()
-    {
-        let pvc = format!("{instance}-data");
-        vols.push(json!({
-            "name": "n8n-data",
-            "persistentVolumeClaim": { "claimName": pvc }
-        }));
-        mounts.push(json!({ "name": "n8n-data", "mountPath": "/home/node/.n8n" }));
-    }
+    let _ = instance; // PVC mount handled separately; keeping parameter for symmetry.
     (vols, mounts)
+}
+
+/// Build the PVC volume + mount entry attached to a pod that needs persistence.
+fn build_persistence_volume(pvc_name: &str) -> (serde_json::Value, serde_json::Value) {
+    (
+        json!({ "name": "n8n-data", "persistentVolumeClaim": { "claimName": pvc_name } }),
+        json!({ "name": "n8n-data", "mountPath": "/home/node/.n8n" }),
+    )
 }
 
 fn secret_volume(name: &str, secret_name: &str, secret_key: &str, file: &str) -> serde_json::Value {
@@ -1356,21 +1389,20 @@ fn secret_volume(name: &str, secret_name: &str, secret_key: &str, file: &str) ->
 }
 
 fn build_data_pvc(
+    pvc_name: &str,
     instance: &str,
     image: &str,
-    db: Option<&DatabaseSpec>,
+    persistence: Option<&PersistenceConfig>,
     owner: &OwnerReference,
 ) -> Option<PersistentVolumeClaim> {
-    let p = db
-        .and_then(|d| d.sqlite.as_ref())
-        .and_then(|s| s.persistence.as_ref())?;
+    let p = persistence?;
     let labels = common_labels(instance, image, "data");
     let annotations = common_annotations();
     let json = json!({
         "apiVersion": "v1",
         "kind": "PersistentVolumeClaim",
         "metadata": {
-            "name": format!("{instance}-data"),
+            "name": pvc_name,
             "labels": labels,
             "annotations": annotations,
             "ownerReferences": [owner],

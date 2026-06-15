@@ -83,10 +83,10 @@ Feature: n8n operator reconciles Single custom resources
     And the Deployment "mysql" has env var "DB_MYSQLDB_HOST" set to "mysql.example.com"
     And the Deployment "mysql" sources env var "DB_MYSQLDB_PASSWORD" from secret "mysql-creds" key "password"
 
-  Scenario: SQLite with persistence provisions a PVC and mounts it at /home/node/.n8n
-    When I apply a Single "sqlite-pv" with SQLite persistence size "1Gi"
-    Then a PersistentVolumeClaim named "sqlite-pv-data" exists with size "1Gi"
-    And the Deployment "sqlite-pv" mounts pvc "sqlite-pv-data" at "/home/node/.n8n"
+  Scenario: spec.persistence provisions a PVC and mounts it at /home/node/.n8n
+    When I apply a Single "persisted" with persistence size "1Gi"
+    Then a PersistentVolumeClaim named "persisted-data" exists with size "1Gi"
+    And the Deployment "persisted" mounts pvc "persisted-data" at "/home/node/.n8n"
 
   Scenario: Database type mismatch is rejected
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"

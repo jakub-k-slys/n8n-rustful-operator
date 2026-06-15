@@ -48,6 +48,7 @@ fn base_spec(image: &str) -> SingleSpec {
         networking: None,
         encryption_key: None,
         database: None,
+        persistence: None,
     }
 }
 
@@ -600,23 +601,13 @@ async fn apply_mysql(
     apply_with_spec(w, &name, spec).await;
 }
 
-#[when(regex = r#"^I apply a Single "([^"]+)" with SQLite persistence size "([^"]+)"$"#)]
-async fn apply_sqlite_persistence(w: &mut E2eWorld, name: String, size: String) {
+#[when(regex = r#"^I apply a Single "([^"]+)" with persistence size "([^"]+)"$"#)]
+async fn apply_with_persistence(w: &mut E2eWorld, name: String, size: String) {
     let mut spec = base_spec("nginx:alpine");
-    spec.database = Some(DatabaseSpec {
-        type_: "sqlite".into(),
-        sqlite: Some(SqliteConfig {
-            pool_size: None,
-            vacuum_on_startup: None,
-            database: None,
-            persistence: Some(PersistenceConfig {
-                size,
-                storage_class_name: None,
-                access_mode: "ReadWriteOnce".into(),
-            }),
-        }),
-        postgres: None,
-        mysql: None,
+    spec.persistence = Some(PersistenceConfig {
+        size,
+        storage_class_name: None,
+        access_mode: "ReadWriteOnce".into(),
     });
     apply_with_spec(w, &name, spec).await;
 }
@@ -904,6 +895,46 @@ async fn apply_cluster_full(
     apply_cluster(w, &name, spec).await;
 }
 
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with main persistence size "([^"]+)"$"#)]
+async fn apply_cluster_with_main_pv(w: &mut E2eWorld, name: String, size: String) {
+    let mut pg = pg_postgres_config();
+    pg.host = "pg.example.com".into();
+    let spec = ClusterSpec {
+        image: "nginx:alpine".into(),
+        encryption_key: None,
+        database: DatabaseSpec {
+            type_: "postgresdb".into(),
+            sqlite: None,
+            postgres: Some(pg),
+            mysql: None,
+        },
+        redis: RedisConfig {
+            host: "redis.example.com".into(),
+            port: Some(6379),
+            db: None,
+            password_secret: Some(SecretKeyRef {
+                name: "redis-creds".into(),
+                key: "password".into(),
+            }),
+            username_secret: None,
+            tls: None,
+            prefix: None,
+        },
+        main: MainConfig {
+            replicas: 1,
+            persistence: Some(PersistenceConfig {
+                size,
+                storage_class_name: None,
+                access_mode: "ReadWriteOnce".into(),
+            }),
+            ..Default::default()
+        },
+        workers: WorkerConfig { replicas: 1, image: None, concurrency: None },
+        webhooks: None,
+    };
+    apply_cluster(w, &name, spec).await;
+}
+
 #[when(regex = r#"^I apply a Cluster "([^"]+)" with sqlite database$"#)]
 async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
     let spec = ClusterSpec {
@@ -915,7 +946,6 @@ async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
                 pool_size: None,
                 vacuum_on_startup: None,
                 database: None,
-                persistence: None,
             }),
             postgres: None,
             mysql: None,

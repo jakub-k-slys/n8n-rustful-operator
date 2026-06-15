@@ -21,6 +21,13 @@ Feature: n8n operator reconciles Cluster custom resources
     When I apply a Cluster "bad-cluster" with sqlite database
     Then the Cluster "bad-cluster" never reaches status.ready=true within 15 seconds
 
+  Scenario: Cluster main.persistence provisions a PVC mounted on the main pod only
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "pv-cluster" with main persistence size "2Gi"
+    Then a PersistentVolumeClaim named "pv-cluster-main-data" exists with size "2Gi"
+    And the Deployment "pv-cluster-main" mounts pvc "pv-cluster-main-data" at "/home/node/.n8n"
+
   Scenario: Dropping the webhooks block removes the webhook Deployment
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"
     And a Secret "redis-creds" exists with key "password" set to "rs3cret"

@@ -209,22 +209,6 @@ spec:
                         description: Path inside the pod, mapped to `DB_SQLITE_DATABASE`.
                         nullable: true
                         type: string
-                      persistence:
-                        description: Mount a PVC at `/home/node/.n8n` so the sqlite file survives pod restarts.
-                        nullable: true
-                        properties:
-                          accessMode:
-                            default: ReadWriteOnce
-                            type: string
-                          size:
-                            description: Storage request, e.g. `1Gi`.
-                            type: string
-                          storageClassName:
-                            nullable: true
-                            type: string
-                        required:
-                        - size
-                        type: object
                       poolSize:
                         format: uint32
                         minimum: 0.0
@@ -303,6 +287,24 @@ spec:
                         nullable: true
                         type: string
                     type: object
+                type: object
+              persistence:
+                description: |-
+                  Mount a PVC at `/home/node/.n8n` so the sqlite file, binary data and runtime
+                  nodes survive pod restarts. Useful regardless of DB type.
+                nullable: true
+                properties:
+                  accessMode:
+                    default: ReadWriteOnce
+                    type: string
+                  size:
+                    description: Storage request, e.g. `1Gi`.
+                    type: string
+                  storageClassName:
+                    nullable: true
+                    type: string
+                required:
+                - size
                 type: object
               replicas:
                 default: 1
@@ -552,22 +554,6 @@ spec:
                         description: Path inside the pod, mapped to `DB_SQLITE_DATABASE`.
                         nullable: true
                         type: string
-                      persistence:
-                        description: Mount a PVC at `/home/node/.n8n` so the sqlite file survives pod restarts.
-                        nullable: true
-                        properties:
-                          accessMode:
-                            default: ReadWriteOnce
-                            type: string
-                          size:
-                            description: Storage request, e.g. `1Gi`.
-                            type: string
-                          storageClassName:
-                            nullable: true
-                            type: string
-                        required:
-                        - size
-                        type: object
                       poolSize:
                         format: uint32
                         minimum: 0.0
@@ -649,6 +635,24 @@ spec:
                             nullable: true
                             type: string
                         type: object
+                    type: object
+                  persistence:
+                    description: |-
+                      Mount a PVC at `/home/node/.n8n` on the main pod only. Workers and webhooks
+                      stay stateless (use DB and S3 for binary data instead).
+                    nullable: true
+                    properties:
+                      accessMode:
+                        default: ReadWriteOnce
+                        type: string
+                      size:
+                        description: Storage request, e.g. `1Gi`.
+                        type: string
+                      storageClassName:
+                        nullable: true
+                        type: string
+                    required:
+                    - size
                     type: object
                   replicas:
                     default: 1
