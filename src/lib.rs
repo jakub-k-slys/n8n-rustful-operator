@@ -1,42 +1,20 @@
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("SerializationError: {0}")]
-    SerializationError(#[source] serde_json::Error),
-
-    #[error("Kube Error: {0}")]
-    KubeError(#[source] kube::Error),
-
-    #[error("Finalizer Error: {0}")]
-    FinalizerError(#[source] Box<kube::runtime::finalizer::Error<Error>>),
-
-    #[error("IllegalSingle")]
-    IllegalSingle,
-
-    #[error(
-        "ConflictingNetworking: spec.networking.ingress and spec.networking.httpRoute are mutually exclusive"
-    )]
-    ConflictingNetworking,
-
-    #[error("IllegalDatabase: {0}")]
-    IllegalDatabase(String),
-
-    #[error("IllegalCluster: {0}")]
-    IllegalCluster(String),
-}
-pub type Result<T, E = Error> = std::result::Result<T, E>;
-
-impl Error {
-    pub fn metric_label(&self) -> String {
-        format!("{self:?}").to_lowercase()
-    }
-}
-
-pub mod controller;
-pub use crate::controller::*;
-
+pub mod builders;
+pub mod env;
+pub mod error;
+pub mod labels;
+pub mod metrics;
+pub mod reconciler;
+pub mod spec;
+pub mod state;
 pub mod telemetry;
 
-mod metrics;
+pub use error::{Error, Result};
 pub use metrics::Metrics;
+pub use reconciler::run;
+pub use spec::{
+    Autoscaling, CLUSTER_FINALIZER, Cluster, ClusterSpec, ClusterStatus, DatabaseSpec, DatabaseSsl,
+    EncryptionKeySpec, GatewayRef, HttpRouteConfig, IngressConfig, MainConfig, MysqlConfig, NetworkingSpec,
+    PersistenceConfig, PostgresConfig, RedisConfig, SINGLE_FINALIZER, SecretKeyRef, ServiceConfig, Single,
+    SingleSpec, SingleStatus, SqliteConfig, WebhookConfig, WorkerConfig,
+};
+pub use state::{Context, Diagnostics, State};

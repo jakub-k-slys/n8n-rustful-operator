@@ -20,14 +20,10 @@ spec:
         description: Auto-generated derived type for SingleSpec via `CustomResource`
         properties:
           spec:
-            description: |-
-              `Single` is a Kubernetes-native description of an n8n deployment.
-
-              The reconciler creates a Deployment and Service for each instance and reports
-              readiness back through the resource status.
+            description: '`Single` is a Kubernetes-native description of a standalone n8n deployment.'
             properties:
               database:
-                description: Database backend configuration. Omit for n8n's sqlite default with no extra env vars.
+                description: Database backend (sqlite default).
                 nullable: true
                 properties:
                   mysql:
@@ -61,7 +57,6 @@ spec:
                         nullable: true
                         properties:
                           caSecret:
-                            description: Mount as `/etc/n8n/ssl/ca/ca.crt` and pass via `DB_*_SSL_CA`.
                             nullable: true
                             properties:
                               key:
@@ -151,7 +146,6 @@ spec:
                         nullable: true
                         properties:
                           caSecret:
-                            description: Mount as `/etc/n8n/ssl/ca/ca.crt` and pass via `DB_*_SSL_CA`.
                             nullable: true
                             properties:
                               key:
@@ -220,19 +214,15 @@ spec:
                     type: object
                   type:
                     default: sqlite
-                    description: '`sqlite` (default), `postgresdb`, `mysqldb` or `mariadb` — maps directly to `DB_TYPE`.'
+                    description: '`sqlite` (default), `postgresdb`, `mysqldb` or `mariadb` — maps to `DB_TYPE`.'
                     type: string
                 type: object
               encryptionKey:
-                description: |-
-                  N8N_ENCRYPTION_KEY source. If omitted, the operator generates a Secret
-                  `<instance>-encryption-key` and owns it via ownerReference.
+                description: N8N_ENCRYPTION_KEY source. Auto-generated if omitted.
                 nullable: true
                 properties:
                   secretRef:
-                    description: |-
-                      Reference to an existing Secret. Mutually exclusive with auto-generation
-                      (omit the whole `encryptionKey` block to auto-generate).
+                    description: Reference to an existing Secret. Omit the whole block to auto-generate.
                     nullable: true
                     properties:
                       key:
@@ -254,7 +244,6 @@ spec:
                 description: Container image to deploy (e.g. `n8nio/n8n:1.70.0`).
                 type: string
               networking:
-                description: Expose n8n via an Ingress OR an HTTPRoute. The two are mutually exclusive.
                 nullable: true
                 properties:
                   httpRoute:
@@ -283,15 +272,13 @@ spec:
                         nullable: true
                         type: string
                       tlsSecretName:
-                        description: Name of a TLS Secret in the same namespace. If set, terminates TLS on the Ingress.
+                        description: Name of a TLS Secret in the same namespace.
                         nullable: true
                         type: string
                     type: object
                 type: object
               persistence:
-                description: |-
-                  Mount a PVC at `/home/node/.n8n` so the sqlite file, binary data and runtime
-                  nodes survive pod restarts. Useful regardless of DB type.
+                description: PVC at `/home/node/.n8n` so binary data and the sqlite file persist.
                 nullable: true
                 properties:
                   accessMode:
@@ -308,11 +295,9 @@ spec:
                 type: object
               replicas:
                 default: 1
-                description: Number of replicas of the n8n pod.
                 format: int32
                 type: integer
               service:
-                description: Service shape. Defaults to ClusterIP (sensible when networking handles ingress).
                 nullable: true
                 properties:
                   type:
@@ -325,7 +310,6 @@ spec:
             nullable: true
             properties:
               encryptionKeySecret:
-                description: Name of the Secret used as N8N_ENCRYPTION_KEY (managed or referenced).
                 nullable: true
                 type: string
               ready:
@@ -373,7 +357,7 @@ spec:
           spec:
             properties:
               database:
-                description: Database backend. Queue mode requires a shared DB — sqlite is rejected.
+                description: Queue mode requires a shared DB; sqlite is rejected.
                 properties:
                   mysql:
                     nullable: true
@@ -406,7 +390,6 @@ spec:
                         nullable: true
                         properties:
                           caSecret:
-                            description: Mount as `/etc/n8n/ssl/ca/ca.crt` and pass via `DB_*_SSL_CA`.
                             nullable: true
                             properties:
                               key:
@@ -496,7 +479,6 @@ spec:
                         nullable: true
                         properties:
                           caSecret:
-                            description: Mount as `/etc/n8n/ssl/ca/ca.crt` and pass via `DB_*_SSL_CA`.
                             nullable: true
                             properties:
                               key:
@@ -565,17 +547,14 @@ spec:
                     type: object
                   type:
                     default: sqlite
-                    description: '`sqlite` (default), `postgresdb`, `mysqldb` or `mariadb` — maps directly to `DB_TYPE`.'
+                    description: '`sqlite` (default), `postgresdb`, `mysqldb` or `mariadb` — maps to `DB_TYPE`.'
                     type: string
                 type: object
               encryptionKey:
-                description: Shared `N8N_ENCRYPTION_KEY`. Omitted → auto-generated `<cluster>-encryption-key`.
                 nullable: true
                 properties:
                   secretRef:
-                    description: |-
-                      Reference to an existing Secret. Mutually exclusive with auto-generation
-                      (omit the whole `encryptionKey` block to auto-generate).
+                    description: Reference to an existing Secret. Omit the whole block to auto-generate.
                     nullable: true
                     properties:
                       key:
@@ -590,7 +569,7 @@ spec:
                 type: object
               image:
                 default: n8nio/n8n:latest
-                description: Cascading default image for every role. Each role can override.
+                description: Cascading default image. Each role can override.
                 type: string
               main:
                 default:
@@ -631,15 +610,13 @@ spec:
                             nullable: true
                             type: string
                           tlsSecretName:
-                            description: Name of a TLS Secret in the same namespace. If set, terminates TLS on the Ingress.
+                            description: Name of a TLS Secret in the same namespace.
                             nullable: true
                             type: string
                         type: object
                     type: object
                   persistence:
-                    description: |-
-                      Mount a PVC at `/home/node/.n8n` on the main pod only. Workers and webhooks
-                      stay stateless (use DB and S3 for binary data instead).
+                    description: PVC at `/home/node/.n8n` for the main pod only.
                     nullable: true
                     properties:
                       accessMode:
@@ -668,7 +645,6 @@ spec:
                     type: object
                 type: object
               redis:
-                description: Redis-backed Bull/BullMQ queue.
                 properties:
                   db:
                     format: uint32
@@ -718,7 +694,6 @@ spec:
                 - host
                 type: object
               webhooks:
-                description: Optional dedicated webhook pool (sets `N8N_DISABLE_PRODUCTION_MAIN_PROCESS=true`).
                 nullable: true
                 properties:
                   host:
@@ -756,7 +731,7 @@ spec:
                             nullable: true
                             type: string
                           tlsSecretName:
-                            description: Name of a TLS Secret in the same namespace. If set, terminates TLS on the Ingress.
+                            description: Name of a TLS Secret in the same namespace.
                             nullable: true
                             type: string
                         type: object
@@ -778,9 +753,7 @@ spec:
               workers:
                 properties:
                   autoscaling:
-                    description: |-
-                      Provision a HorizontalPodAutoscaler for the worker Deployment. When set,
-                      the operator stops managing `spec.replicas` so HPA can drive it.
+                    description: HPA opts the worker Deployment into horizontal autoscaling.
                     nullable: true
                     properties:
                       maxReplicas:
@@ -790,7 +763,6 @@ spec:
                         format: int32
                         type: integer
                       targetCPUUtilizationPercentage:
-                        description: Average CPU utilisation target (percent). Defaults to 70.
                         format: int32
                         nullable: true
                         type: integer
@@ -808,7 +780,7 @@ spec:
                     nullable: true
                     type: string
                   replicas:
-                    description: Static replica count. Ignored when `autoscaling` is set (HPA owns the field).
+                    description: Static replica count. Ignored when `autoscaling` is set.
                     format: int32
                     type: integer
                 required:

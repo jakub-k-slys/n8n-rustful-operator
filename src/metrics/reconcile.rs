@@ -1,47 +1,14 @@
-use crate::{Error, Single};
+use crate::{
+    Error,
+    metrics::labels::{ErrorLabels, TraceLabel},
+};
 use kube::ResourceExt;
 use opentelemetry::trace::TraceId;
 use prometheus_client::{
-    encoding::EncodeLabelSet,
     metrics::{counter::Counter, exemplar::HistogramWithExemplars, family::Family},
     registry::{Registry, Unit},
 };
-use std::sync::Arc;
 use tokio::time::Instant;
-
-#[derive(Clone)]
-pub struct Metrics {
-    pub reconcile: ReconcileMetrics,
-    pub registry: Arc<Registry>,
-}
-
-impl Default for Metrics {
-    fn default() -> Self {
-        let mut registry = Registry::with_prefix("n8n_operator_reconcile");
-        let reconcile = ReconcileMetrics::default().register(&mut registry);
-        Self {
-            registry: Arc::new(registry),
-            reconcile,
-        }
-    }
-}
-
-#[derive(Clone, Hash, PartialEq, Eq, EncodeLabelSet, Debug, Default)]
-pub struct TraceLabel {
-    pub trace_id: String,
-}
-impl TryFrom<&TraceId> for TraceLabel {
-    type Error = anyhow::Error;
-
-    fn try_from(id: &TraceId) -> Result<TraceLabel, Self::Error> {
-        if std::matches!(id, &TraceId::INVALID) {
-            anyhow::bail!("invalid trace id")
-        } else {
-            let trace_id = id.to_string();
-            Ok(Self { trace_id })
-        }
-    }
-}
 
 #[derive(Clone)]
 pub struct ReconcileMetrics {
@@ -60,12 +27,6 @@ impl Default for ReconcileMetrics {
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
-pub struct ErrorLabels {
-    pub instance: String,
-    pub error: String,
-}
-
 impl ReconcileMetrics {
     pub fn register(self, r: &mut Registry) -> Self {
         r.register_with_unit(
@@ -79,10 +40,10 @@ impl ReconcileMetrics {
         self
     }
 
-    pub fn set_failure(&self, inst: &Single, e: &Error) {
+    pub fn set_failure<R: ResourceExt>(&self, obj: &R, e: &Error) {
         self.failures
             .get_or_create(&ErrorLabels {
-                instance: inst.name_any(),
+                instance: obj.name_any(),
                 error: e.metric_label(),
             })
             .inc();
@@ -98,6 +59,7 @@ impl ReconcileMetrics {
     }
 }
 
+/// Records duration via `Drop`.
 pub struct ReconcileMeasurer {
     start: Instant,
     labels: Option<TraceLabel>,
@@ -108,8 +70,7 @@ impl Drop for ReconcileMeasurer {
     fn drop(&mut self) {
         #[allow(clippy::cast_precision_loss)]
         let duration = self.start.elapsed().as_millis() as f64 / 1000.0;
-        let labels = self.labels.take();
         self.metric
-            .observe(duration, labels, Some(std::time::SystemTime::now()));
+            .observe(duration, self.labels.take(), Some(std::time::SystemTime::now()));
     }
 }

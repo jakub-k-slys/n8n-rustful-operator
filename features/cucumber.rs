@@ -882,7 +882,12 @@ async fn apply_cluster_full(
             replicas: 1,
             ..Default::default()
         },
-        workers: WorkerConfig { replicas: workers, image: None, concurrency: Some(5), autoscaling: None },
+        workers: WorkerConfig {
+            replicas: workers,
+            image: None,
+            concurrency: Some(5),
+            autoscaling: None,
+        },
         webhooks: Some(WebhookConfig {
             replicas: 1,
             image: None,
@@ -928,7 +933,12 @@ async fn apply_cluster_with_main_pv(w: &mut E2eWorld, name: String, size: String
             }),
             ..Default::default()
         },
-        workers: WorkerConfig { replicas: 1, image: None, concurrency: None, autoscaling: None },
+        workers: WorkerConfig {
+            replicas: 1,
+            image: None,
+            concurrency: None,
+            autoscaling: None,
+        },
         webhooks: None,
     };
     apply_cluster(w, &name, spec).await;
@@ -954,7 +964,12 @@ async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
             ..Default::default()
         },
         main: MainConfig::default(),
-        workers: WorkerConfig { replicas: 1, image: None, concurrency: None, autoscaling: None },
+        workers: WorkerConfig {
+            replicas: 1,
+            image: None,
+            concurrency: None,
+            autoscaling: None,
+        },
         webhooks: None,
     };
     apply_cluster(w, &name, spec).await;
@@ -1034,14 +1049,10 @@ async fn apply_single_replicas(w: &mut E2eWorld, name: String, image: String, re
     apply_with_spec(w, &name, spec).await;
 }
 
-#[when(regex = r#"^I apply a Single "([^"]+)" with ingress class "([^"]+)" host "([^"]+)" and TLS secret "([^"]+)"$"#)]
-async fn apply_single_ingress_tls(
-    w: &mut E2eWorld,
-    name: String,
-    class: String,
-    host: String,
-    tls: String,
-) {
+#[when(
+    regex = r#"^I apply a Single "([^"]+)" with ingress class "([^"]+)" host "([^"]+)" and TLS secret "([^"]+)"$"#
+)]
+async fn apply_single_ingress_tls(w: &mut E2eWorld, name: String, class: String, host: String, tls: String) {
     let mut spec = base_spec("nginx:alpine");
     spec.host = Some(host);
     spec.networking = Some(NetworkingSpec {
@@ -1087,12 +1098,7 @@ async fn ingress_tls(w: &mut E2eWorld, name: String, secret: String) {
 // ----- extra Cluster steps -----
 
 #[when(regex = r#"^I apply a Cluster "([^"]+)" with encryption key from secret "([^"]+)" key "([^"]+)"$"#)]
-async fn apply_cluster_byo_key(
-    w: &mut E2eWorld,
-    name: String,
-    secret: String,
-    key: String,
-) {
+async fn apply_cluster_byo_key(w: &mut E2eWorld, name: String, secret: String, key: String) {
     let spec = ClusterSpec {
         image: "nginx:alpine".into(),
         encryption_key: Some(EncryptionKeySpec {
@@ -1113,20 +1119,23 @@ async fn apply_cluster_byo_key(
             }),
             ..Default::default()
         },
-        main: MainConfig { replicas: 1, ..Default::default() },
-        workers: WorkerConfig { replicas: 1, image: None, concurrency: None, autoscaling: None },
+        main: MainConfig {
+            replicas: 1,
+            ..Default::default()
+        },
+        workers: WorkerConfig {
+            replicas: 1,
+            image: None,
+            concurrency: None,
+            autoscaling: None,
+        },
         webhooks: None,
     };
     apply_cluster(w, &name, spec).await;
 }
 
 #[when(regex = r#"^I apply a Cluster "([^"]+)" with main ingress class "([^"]+)" and host "([^"]+)"$"#)]
-async fn apply_cluster_main_ingress(
-    w: &mut E2eWorld,
-    name: String,
-    class: String,
-    host: String,
-) {
+async fn apply_cluster_main_ingress(w: &mut E2eWorld, name: String, class: String, host: String) {
     let spec = ClusterSpec {
         image: "nginx:alpine".into(),
         encryption_key: None,
@@ -1157,7 +1166,12 @@ async fn apply_cluster_main_ingress(
             }),
             ..Default::default()
         },
-        workers: WorkerConfig { replicas: 1, image: None, concurrency: None, autoscaling: None },
+        workers: WorkerConfig {
+            replicas: 1,
+            image: None,
+            concurrency: None,
+            autoscaling: None,
+        },
         webhooks: None,
     };
     apply_cluster(w, &name, spec).await;
@@ -1193,7 +1207,12 @@ async fn apply_cluster_image_overrides(
             image: Some(main_image),
             ..Default::default()
         },
-        workers: WorkerConfig { replicas: 1, image: Some(worker_image), concurrency: None, autoscaling: None },
+        workers: WorkerConfig {
+            replicas: 1,
+            image: Some(worker_image),
+            concurrency: None,
+            autoscaling: None,
+        },
         webhooks: None,
     };
     apply_cluster(w, &name, spec).await;
@@ -1220,8 +1239,16 @@ async fn apply_cluster_redis_prefix(w: &mut E2eWorld, name: String, prefix: Stri
             prefix: Some(prefix),
             ..Default::default()
         },
-        main: MainConfig { replicas: 1, ..Default::default() },
-        workers: WorkerConfig { replicas: 1, image: None, concurrency: None, autoscaling: None },
+        main: MainConfig {
+            replicas: 1,
+            ..Default::default()
+        },
+        workers: WorkerConfig {
+            replicas: 1,
+            image: None,
+            concurrency: None,
+            autoscaling: None,
+        },
         webhooks: None,
     };
     apply_cluster(w, &name, spec).await;
@@ -1259,12 +1286,13 @@ async fn deployment_runs_command(w: &mut E2eWorld, name: String, command: String
         async move {
             let api: Api<Deployment> = Api::namespaced(client, NS);
             match api.get_opt(&n).await.unwrap() {
-                Some(d) => d
-                    .spec
-                    .and_then(|s| s.template.spec)
-                    .and_then(|s| s.containers.into_iter().next())
-                    .and_then(|c| c.command)
-                    == Some(exp.clone()),
+                Some(d) => {
+                    d.spec
+                        .and_then(|s| s.template.spec)
+                        .and_then(|s| s.containers.into_iter().next())
+                        .and_then(|c| c.command)
+                        == Some(exp.clone())
+                }
                 None => false,
             }
         }
@@ -1284,12 +1312,13 @@ async fn deployment_runs_image(w: &mut E2eWorld, name: String, image: String) {
         async move {
             let api: Api<Deployment> = Api::namespaced(client, NS);
             match api.get_opt(&n).await.unwrap() {
-                Some(d) => d
-                    .spec
-                    .and_then(|s| s.template.spec)
-                    .and_then(|s| s.containers.into_iter().next())
-                    .and_then(|c| c.image)
-                    == Some(img.clone()),
+                Some(d) => {
+                    d.spec
+                        .and_then(|s| s.template.spec)
+                        .and_then(|s| s.containers.into_iter().next())
+                        .and_then(|c| c.image)
+                        == Some(img.clone())
+                }
                 None => false,
             }
         }
@@ -1297,14 +1326,10 @@ async fn deployment_runs_image(w: &mut E2eWorld, name: String, image: String) {
     .await;
 }
 
-#[then(regex = r#"^the Cluster "([^"]+)" has status mainReplicas (\d+) workerReplicas (\d+) webhookReplicas (\d+)$"#)]
-async fn cluster_status_replicas(
-    w: &mut E2eWorld,
-    name: String,
-    main: i32,
-    worker: i32,
-    webhook: i32,
-) {
+#[then(
+    regex = r#"^the Cluster "([^"]+)" has status mainReplicas (\d+) workerReplicas (\d+) webhookReplicas (\d+)$"#
+)]
+async fn cluster_status_replicas(w: &mut E2eWorld, name: String, main: i32, worker: i32, webhook: i32) {
     let client = w.client().clone();
     let n = name.clone();
     wait_until(60, &format!("Cluster/{name} status replicas"), move || {
@@ -1351,7 +1376,9 @@ fn http_route_api(client: Client) -> Api<DynamicObject> {
     Api::namespaced_with(client, NS, &ar)
 }
 
-#[when(regex = r#"^I apply a Single "([^"]+)" with httpRoute gateway "([^"]+)" namespace "([^"]+)" and host "([^"]+)"$"#)]
+#[when(
+    regex = r#"^I apply a Single "([^"]+)" with httpRoute gateway "([^"]+)" namespace "([^"]+)" and host "([^"]+)"$"#
+)]
 async fn apply_single_route(
     w: &mut E2eWorld,
     name: String,
@@ -1380,7 +1407,10 @@ async fn single_with_route_exists(w: &mut E2eWorld, name: String, gateway: Strin
     spec.networking = Some(NetworkingSpec {
         ingress: None,
         http_route: Some(HttpRouteConfig {
-            gateway: GatewayRef { name: gateway, namespace: Some("default".into()) },
+            gateway: GatewayRef {
+                name: gateway,
+                namespace: Some("default".into()),
+            },
         }),
     });
     apply_with_spec(w, &name, spec).await;
@@ -1394,7 +1424,9 @@ async fn single_with_route_exists(w: &mut E2eWorld, name: String, gateway: Strin
     .await;
 }
 
-#[when(regex = r#"^I apply a Cluster "([^"]+)" with main httpRoute gateway "([^"]+)" namespace "([^"]+)" and host "([^"]+)"$"#)]
+#[when(
+    regex = r#"^I apply a Cluster "([^"]+)" with main httpRoute gateway "([^"]+)" namespace "([^"]+)" and host "([^"]+)"$"#
+)]
 async fn apply_cluster_main_route(
     w: &mut E2eWorld,
     name: String,
@@ -1426,12 +1458,20 @@ async fn apply_cluster_main_route(
             networking: Some(NetworkingSpec {
                 ingress: None,
                 http_route: Some(HttpRouteConfig {
-                    gateway: GatewayRef { name: gateway, namespace: Some(gateway_ns) },
+                    gateway: GatewayRef {
+                        name: gateway,
+                        namespace: Some(gateway_ns),
+                    },
                 }),
             }),
             ..Default::default()
         },
-        workers: WorkerConfig { replicas: 1, image: None, concurrency: None, autoscaling: None },
+        workers: WorkerConfig {
+            replicas: 1,
+            image: None,
+            concurrency: None,
+            autoscaling: None,
+        },
         webhooks: None,
     };
     apply_cluster(w, &name, spec).await;
@@ -1474,8 +1514,14 @@ async fn httproute_parent(w: &mut E2eWorld, name: String, gateway: String, gw_ns
         .and_then(|v| v.as_array())
         .and_then(|a| a.first())
         .expect("no parentRefs");
-    assert_eq!(parent.get("name").and_then(|v| v.as_str()), Some(gateway.as_str()));
-    assert_eq!(parent.get("namespace").and_then(|v| v.as_str()), Some(gw_ns.as_str()));
+    assert_eq!(
+        parent.get("name").and_then(|v| v.as_str()),
+        Some(gateway.as_str())
+    );
+    assert_eq!(
+        parent.get("namespace").and_then(|v| v.as_str()),
+        Some(gw_ns.as_str())
+    );
 }
 
 #[then(regex = r#"^the HTTPRoute "([^"]+)" is gone within (\d+) seconds$"#)]
@@ -1515,7 +1561,10 @@ async fn apply_cluster_hpa(w: &mut E2eWorld, name: String, min: i32, max: i32) {
             }),
             ..Default::default()
         },
-        main: MainConfig { replicas: 1, ..Default::default() },
+        main: MainConfig {
+            replicas: 1,
+            ..Default::default()
+        },
         workers: WorkerConfig {
             replicas: 1,
             image: None,
@@ -1561,7 +1610,9 @@ async fn drop_cluster_hpa(w: &mut E2eWorld, name: String) {
         .expect("update Cluster");
 }
 
-#[then(regex = r#"^a HorizontalPodAutoscaler named "([^"]+)" exists with min (\d+) max (\d+) within (\d+) seconds$"#)]
+#[then(
+    regex = r#"^a HorizontalPodAutoscaler named "([^"]+)" exists with min (\d+) max (\d+) within (\d+) seconds$"#
+)]
 async fn hpa_min_max(w: &mut E2eWorld, name: String, min: i32, max: i32, secs: u64) {
     let client = w.client().clone();
     let n = name.clone();
