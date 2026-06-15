@@ -9,8 +9,8 @@ use kube::{
     api::{Api, DeleteParams, ObjectMeta, Patch, PatchParams, ResourceExt},
 };
 use n8n_rustful_operator::{
-    DatabaseSpec, DatabaseSsl, EncryptionKeySpec, GatewayRef, HttpRouteConfig, IngressConfig, Instance,
-    InstanceSpec, MysqlConfig, NetworkingSpec, PersistenceConfig, PostgresConfig, SecretKeyRef,
+    DatabaseSpec, DatabaseSsl, EncryptionKeySpec, GatewayRef, HttpRouteConfig, IngressConfig, Single,
+    SingleSpec, MysqlConfig, NetworkingSpec, PersistenceConfig, PostgresConfig, SecretKeyRef,
     ServiceConfig, SqliteConfig,
 };
 use std::{collections::BTreeMap, time::Duration};
@@ -39,8 +39,8 @@ impl E2eWorld {
 
 // ----- builders -----
 
-fn base_spec(image: &str) -> InstanceSpec {
-    InstanceSpec {
+fn base_spec(image: &str) -> SingleSpec {
+    SingleSpec {
         image: image.into(),
         replicas: 1,
         host: Some("e2e.example.com".into()),
@@ -51,13 +51,13 @@ fn base_spec(image: &str) -> InstanceSpec {
     }
 }
 
-async fn apply_with_spec(w: &mut E2eWorld, name: &str, spec: InstanceSpec) {
-    let api: Api<Instance> = Api::namespaced(w.client().clone(), NS);
-    let inst = Instance::new(name, spec);
+async fn apply_with_spec(w: &mut E2eWorld, name: &str, spec: SingleSpec) {
+    let api: Api<Single> = Api::namespaced(w.client().clone(), NS);
+    let inst = Single::new(name, spec);
     let ssa = PatchParams::apply("cucumber").force();
     api.patch(name, &ssa, &Patch::Apply(&inst))
         .await
-        .expect("apply Instance");
+        .expect("apply Single");
 }
 
 async fn wait_until<F, Fut>(timeout_secs: u64, label: &str, mut check: F)
@@ -92,7 +92,7 @@ async fn cluster_ready(w: &mut E2eWorld) {
     w.client = Some(client);
 }
 
-#[given(regex = r#"^an Instance "([^"]+)" exists$"#)]
+#[given(regex = r#"^a Single "([^"]+)" exists$"#)]
 async fn instance_exists(w: &mut E2eWorld, name: String) {
     apply_with_spec(w, &name, base_spec("nginx:alpine")).await;
     let client = w.client().clone();
@@ -105,7 +105,7 @@ async fn instance_exists(w: &mut E2eWorld, name: String) {
     .await;
 }
 
-#[given(regex = r#"^an Instance "([^"]+)" exists with ingress class "([^"]+)" and host "([^"]+)"$"#)]
+#[given(regex = r#"^a Single "([^"]+)" exists with ingress class "([^"]+)" and host "([^"]+)"$"#)]
 async fn instance_with_ingress_exists(w: &mut E2eWorld, name: String, class: String, host: String) {
     let mut spec = base_spec("nginx:alpine");
     spec.host = Some(host);
@@ -150,19 +150,19 @@ async fn create_secret(w: &mut E2eWorld, name: String, key: String, value: Strin
 
 // ----- When -----
 
-#[when(regex = r#"^I apply an Instance "([^"]+)" with image "([^"]+)"$"#)]
+#[when(regex = r#"^I apply a Single "([^"]+)" with image "([^"]+)"$"#)]
 async fn when_apply_basic(w: &mut E2eWorld, name: String, image: String) {
     apply_with_spec(w, &name, base_spec(&image)).await;
 }
 
-#[when(regex = r#"^I apply an Instance "([^"]+)" with image "([^"]+)" and service type "([^"]+)"$"#)]
+#[when(regex = r#"^I apply a Single "([^"]+)" with image "([^"]+)" and service type "([^"]+)"$"#)]
 async fn when_apply_svc_type(w: &mut E2eWorld, name: String, image: String, svc_type: String) {
     let mut spec = base_spec(&image);
     spec.service = Some(ServiceConfig { type_: svc_type });
     apply_with_spec(w, &name, spec).await;
 }
 
-#[when(regex = r#"^I apply an Instance "([^"]+)" with ingress class "([^"]+)" and host "([^"]+)"$"#)]
+#[when(regex = r#"^I apply a Single "([^"]+)" with ingress class "([^"]+)" and host "([^"]+)"$"#)]
 async fn when_apply_ingress(w: &mut E2eWorld, name: String, class: String, host: String) {
     let mut spec = base_spec("nginx:alpine");
     spec.host = Some(host);
@@ -177,7 +177,7 @@ async fn when_apply_ingress(w: &mut E2eWorld, name: String, class: String, host:
 }
 
 #[when(
-    regex = r#"^I apply an Instance "([^"]+)" with image "([^"]+)" and encryption key from secret "([^"]+)" key "([^"]+)"$"#
+    regex = r#"^I apply a Single "([^"]+)" with image "([^"]+)" and encryption key from secret "([^"]+)" key "([^"]+)"$"#
 )]
 async fn when_apply_byo_key(
     w: &mut E2eWorld,
@@ -196,7 +196,7 @@ async fn when_apply_byo_key(
     apply_with_spec(w, &name, spec).await;
 }
 
-#[when(regex = r#"^I apply an Instance "([^"]+)" with both ingress and httpRoute$"#)]
+#[when(regex = r#"^I apply a Single "([^"]+)" with both ingress and httpRoute$"#)]
 async fn when_apply_both(w: &mut E2eWorld, name: String) {
     let mut spec = base_spec("nginx:alpine");
     spec.networking = Some(NetworkingSpec {
@@ -214,25 +214,25 @@ async fn when_apply_both(w: &mut E2eWorld, name: String) {
     apply_with_spec(w, &name, spec).await;
 }
 
-#[when(regex = r#"^I update the Instance "([^"]+)" to have no networking$"#)]
+#[when(regex = r#"^I update the Single "([^"]+)" to have no networking$"#)]
 async fn when_drop_networking(w: &mut E2eWorld, name: String) {
-    let api: Api<Instance> = Api::namespaced(w.client().clone(), NS);
-    let current = api.get(&name).await.expect("Instance");
+    let api: Api<Single> = Api::namespaced(w.client().clone(), NS);
+    let current = api.get(&name).await.expect("Single");
     let mut spec = current.spec.clone();
     spec.networking = None;
-    let new = Instance::new(&name, spec);
+    let new = Single::new(&name, spec);
     let ssa = PatchParams::apply("cucumber").force();
     api.patch(&name, &ssa, &Patch::Apply(&new))
         .await
-        .expect("update Instance");
+        .expect("update Single");
 }
 
-#[when(regex = r#"^I delete the Instance "([^"]+)"$"#)]
+#[when(regex = r#"^I delete the Single "([^"]+)"$"#)]
 async fn when_delete_instance(w: &mut E2eWorld, name: String) {
-    let api: Api<Instance> = Api::namespaced(w.client().clone(), NS);
+    let api: Api<Single> = Api::namespaced(w.client().clone(), NS);
     api.delete(&name, &DeleteParams::default())
         .await
-        .expect("delete Instance");
+        .expect("delete Single");
 }
 
 // ----- Then -----
@@ -296,15 +296,15 @@ async fn service_has_type(w: &mut E2eWorld, name: String, expected: String) {
     .await;
 }
 
-#[then(regex = r#"^the Instance "([^"]+)" has status.ready set to true within (\d+) seconds$"#)]
+#[then(regex = r#"^the Single "([^"]+)" has status.ready set to true within (\d+) seconds$"#)]
 async fn status_ready(w: &mut E2eWorld, name: String, secs: u64) {
     let client = w.client().clone();
     let n = name.clone();
-    wait_until(secs, &format!("Instance/{name} status.ready"), move || {
+    wait_until(secs, &format!("Single/{name} status.ready"), move || {
         let client = client.clone();
         let n = n.clone();
         async move {
-            let api: Api<Instance> = Api::namespaced(client, NS);
+            let api: Api<Single> = Api::namespaced(client, NS);
             api.get(&n)
                 .await
                 .ok()
@@ -315,10 +315,10 @@ async fn status_ready(w: &mut E2eWorld, name: String, secs: u64) {
     .await;
 }
 
-#[then(regex = r#"^the Instance "([^"]+)" has the finalizer "([^"]+)"$"#)]
+#[then(regex = r#"^the Single "([^"]+)" has the finalizer "([^"]+)"$"#)]
 async fn has_finalizer(w: &mut E2eWorld, name: String, finalizer: String) {
-    let api: Api<Instance> = Api::namespaced(w.client().clone(), NS);
-    let inst = api.get(&name).await.expect("Instance");
+    let api: Api<Single> = Api::namespaced(w.client().clone(), NS);
+    let inst = api.get(&name).await.expect("Single");
     let finalizers = inst.finalizers();
     assert!(
         finalizers.iter().any(|f| f == &finalizer),
@@ -326,15 +326,15 @@ async fn has_finalizer(w: &mut E2eWorld, name: String, finalizer: String) {
     );
 }
 
-#[then(regex = r#"^the Instance "([^"]+)" is gone within (\d+) seconds$"#)]
+#[then(regex = r#"^the Single "([^"]+)" is gone within (\d+) seconds$"#)]
 async fn instance_gone(w: &mut E2eWorld, name: String, secs: u64) {
     let client = w.client().clone();
     let n = name.clone();
-    wait_until(secs, &format!("Instance/{name} gone"), move || {
+    wait_until(secs, &format!("Single/{name} gone"), move || {
         let client = client.clone();
         let n = n.clone();
         async move {
-            let api: Api<Instance> = Api::namespaced(client, NS);
+            let api: Api<Single> = Api::namespaced(client, NS);
             api.get_opt(&n).await.unwrap().is_none()
         }
     })
@@ -366,14 +366,14 @@ async fn secret_with_key(w: &mut E2eWorld, name: String, key: String) {
     .await;
 }
 
-#[then(regex = r#"^the Secret "([^"]+)" is owned by the Instance "([^"]+)"$"#)]
+#[then(regex = r#"^the Secret "([^"]+)" is owned by the Single "([^"]+)"$"#)]
 async fn secret_owned(w: &mut E2eWorld, secret: String, owner: String) {
     let api: Api<Secret> = Api::namespaced(w.client().clone(), NS);
     let s = api.get(&secret).await.expect("Secret");
     let owners = s.owner_references();
     assert!(
-        owners.iter().any(|o| o.kind == "Instance" && o.name == owner),
-        "Secret/{secret} has no Instance/{owner} owner, got {:?}",
+        owners.iter().any(|o| o.kind == "Single" && o.name == owner),
+        "Secret/{secret} has no Single/{owner} owner, got {:?}",
         owners
     );
 }
@@ -460,14 +460,14 @@ async fn ingress_gone(w: &mut E2eWorld, name: String, secs: u64) {
     .await;
 }
 
-#[then(regex = r#"^the Instance "([^"]+)" never reaches status.ready=true within (\d+) seconds$"#)]
+#[then(regex = r#"^the Single "([^"]+)" never reaches status.ready=true within (\d+) seconds$"#)]
 async fn never_ready(w: &mut E2eWorld, name: String, secs: u64) {
-    let api: Api<Instance> = Api::namespaced(w.client().clone(), NS);
+    let api: Api<Single> = Api::namespaced(w.client().clone(), NS);
     let deadline = Instant::now() + Duration::from_secs(secs);
     while Instant::now() < deadline {
-        let inst = api.get(&name).await.expect("Instance");
+        let inst = api.get(&name).await.expect("Single");
         if inst.status.as_ref().map(|s| s.ready).unwrap_or(false) {
-            panic!("Instance/{name} became ready, but spec is invalid (mutex)");
+            panic!("Single/{name} became ready, but spec is invalid (mutex)");
         }
         sleep(Duration::from_millis(500)).await;
     }
@@ -486,7 +486,7 @@ async fn no_ingress(w: &mut E2eWorld, name: String) {
 
 #[allow(clippy::too_many_arguments)]
 #[when(
-    regex = r#"^I apply an Instance "([^"]+)" with Postgres host "([^"]+)" port (\d+) database "([^"]+)" user "([^"]+)" password from secret "([^"]+)" key "([^"]+)" schema "([^"]+)" pool size (\d+)$"#
+    regex = r#"^I apply a Single "([^"]+)" with Postgres host "([^"]+)" port (\d+) database "([^"]+)" user "([^"]+)" password from secret "([^"]+)" key "([^"]+)" schema "([^"]+)" pool size (\d+)$"#
 )]
 async fn apply_postgres_full(
     w: &mut E2eWorld,
@@ -522,7 +522,7 @@ async fn apply_postgres_full(
 
 #[allow(clippy::too_many_arguments)]
 #[when(
-    regex = r#"^I apply an Instance "([^"]+)" with Postgres host "([^"]+)" database "([^"]+)" user "([^"]+)" password from secret "([^"]+)" key "([^"]+)" and SSL CA from secret "([^"]+)" key "([^"]+)"$"#
+    regex = r#"^I apply a Single "([^"]+)" with Postgres host "([^"]+)" database "([^"]+)" user "([^"]+)" password from secret "([^"]+)" key "([^"]+)" and SSL CA from secret "([^"]+)" key "([^"]+)"$"#
 )]
 async fn apply_postgres_ssl(
     w: &mut E2eWorld,
@@ -569,7 +569,7 @@ async fn apply_postgres_ssl(
 
 #[allow(clippy::too_many_arguments)]
 #[when(
-    regex = r#"^I apply an Instance "([^"]+)" with MySQL host "([^"]+)" port (\d+) database "([^"]+)" user "([^"]+)" password from secret "([^"]+)" key "([^"]+)"$"#
+    regex = r#"^I apply a Single "([^"]+)" with MySQL host "([^"]+)" port (\d+) database "([^"]+)" user "([^"]+)" password from secret "([^"]+)" key "([^"]+)"$"#
 )]
 async fn apply_mysql(
     w: &mut E2eWorld,
@@ -599,7 +599,7 @@ async fn apply_mysql(
     apply_with_spec(w, &name, spec).await;
 }
 
-#[when(regex = r#"^I apply an Instance "([^"]+)" with SQLite persistence size "([^"]+)"$"#)]
+#[when(regex = r#"^I apply a Single "([^"]+)" with SQLite persistence size "([^"]+)"$"#)]
 async fn apply_sqlite_persistence(w: &mut E2eWorld, name: String, size: String) {
     let mut spec = base_spec("nginx:alpine");
     spec.database = Some(DatabaseSpec {
@@ -620,7 +620,7 @@ async fn apply_sqlite_persistence(w: &mut E2eWorld, name: String, size: String) 
     apply_with_spec(w, &name, spec).await;
 }
 
-#[when(regex = r#"^I apply an Instance "([^"]+)" with database type "([^"]+)" and only a MySQL config$"#)]
+#[when(regex = r#"^I apply a Single "([^"]+)" with database type "([^"]+)" and only a MySQL config$"#)]
 async fn apply_db_type_mismatch(w: &mut E2eWorld, name: String, type_: String) {
     let mut spec = base_spec("nginx:alpine");
     spec.database = Some(DatabaseSpec {

@@ -11,8 +11,8 @@ pub enum Error {
     #[error("Finalizer Error: {0}")]
     FinalizerError(#[source] Box<kube::runtime::finalizer::Error<Error>>),
 
-    #[error("IllegalInstance")]
-    IllegalInstance,
+    #[error("IllegalSingle")]
+    IllegalSingle,
 
     #[error(
         "ConflictingNetworking: spec.networking.ingress and spec.networking.httpRoute are mutually exclusive"

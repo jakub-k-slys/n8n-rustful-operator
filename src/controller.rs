@@ -29,24 +29,24 @@ use std::{collections::BTreeMap, sync::Arc};
 use tokio::{sync::RwLock, time::Duration};
 use tracing::*;
 
-pub static N8N_FINALIZER: &str = "instances.n8n.slys.dev";
+pub static N8N_FINALIZER: &str = "singles.n8n.slys.dev";
 
-/// `Instance` is a Kubernetes-native description of an n8n deployment.
+/// `Single` is a Kubernetes-native description of an n8n deployment.
 ///
 /// The reconciler creates a Deployment and Service for each instance and reports
 /// readiness back through the resource status.
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema)]
 #[cfg_attr(test, derive(Default))]
 #[kube(
-    kind = "Instance",
+    kind = "Single",
     group = "n8n.slys.dev",
     version = "v1",
     namespaced,
     shortname = "n8n",
-    plural = "instances",
-    status = "InstanceStatus"
+    plural = "singles",
+    status = "SingleStatus"
 )]
-pub struct InstanceSpec {
+pub struct SingleSpec {
     /// Container image to deploy (e.g. `n8nio/n8n:1.70.0`).
     #[serde(default = "default_image")]
     pub image: String,
@@ -248,7 +248,7 @@ fn default_service_type() -> String {
 }
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug, JsonSchema)]
-pub struct InstanceStatus {
+pub struct SingleStatus {
     pub ready: bool,
     pub replicas: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -267,7 +267,7 @@ pub struct Context {
 }
 
 #[instrument(skip(ctx, inst), fields(trace_id))]
-async fn reconcile(inst: Arc<Instance>, ctx: Arc<Context>) -> Result<Action> {
+async fn reconcile(inst: Arc<Single>, ctx: Arc<Context>) -> Result<Action> {
     let trace_id = telemetry::get_trace_id();
     if trace_id != opentelemetry::trace::TraceId::INVALID {
         Span::current().record("trace_id", field::display(&trace_id));
@@ -275,9 +275,9 @@ async fn reconcile(inst: Arc<Instance>, ctx: Arc<Context>) -> Result<Action> {
     let _timer = ctx.metrics.reconcile.count_and_measure(&trace_id);
     ctx.diagnostics.write().await.last_event = Timestamp::now();
     let ns = inst.namespace().unwrap();
-    let api: Api<Instance> = Api::namespaced(ctx.client.clone(), &ns);
+    let api: Api<Single> = Api::namespaced(ctx.client.clone(), &ns);
 
-    info!("Reconciling Instance \"{}\" in {}", inst.name_any(), ns);
+    info!("Reconciling Single \"{}\" in {}", inst.name_any(), ns);
     finalizer(&api, N8N_FINALIZER, inst, |event| async {
         match event {
             Finalizer::Apply(i) => i.reconcile(ctx.clone()).await,
@@ -288,13 +288,13 @@ async fn reconcile(inst: Arc<Instance>, ctx: Arc<Context>) -> Result<Action> {
     .map_err(|e| Error::FinalizerError(Box::new(e)))
 }
 
-fn error_policy(inst: Arc<Instance>, error: &Error, ctx: Arc<Context>) -> Action {
+fn error_policy(inst: Arc<Single>, error: &Error, ctx: Arc<Context>) -> Action {
     warn!("reconcile failed: {:?}", error);
     ctx.metrics.reconcile.set_failure(&inst, error);
     Action::requeue(Duration::from_secs(5 * 60))
 }
 
-impl Instance {
+impl Single {
     async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
         let client = ctx.client.clone();
         let oref = self.object_ref(&());
@@ -302,7 +302,7 @@ impl Instance {
         let name = self.name_any();
 
         if name == "illegal" {
-            return Err(Error::IllegalInstance);
+            return Err(Error::IllegalSingle);
         }
 
         if let Some(net) = &self.spec.networking
@@ -323,7 +323,7 @@ impl Instance {
 
         let deployments: Api<Deployment> = Api::namespaced(client.clone(), &ns);
         let services: Api<Service> = Api::namespaced(client.clone(), &ns);
-        let instances: Api<Instance> = Api::namespaced(client.clone(), &ns);
+        let instances: Api<Single> = Api::namespaced(client.clone(), &ns);
         let pvcs: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), &ns);
 
         if let Some(pvc) = build_data_pvc(&name, &self.spec.image, self.spec.database.as_ref(), &owner) {
@@ -393,7 +393,7 @@ impl Instance {
             .await
             .map_err(Error::KubeError)?;
 
-        let status = InstanceStatus {
+        let status = SingleStatus {
             ready: true,
             replicas: self.spec.replicas,
             url: self.spec.host.as_ref().map(|h| format!("https://{h}")),
@@ -401,7 +401,7 @@ impl Instance {
         };
         let patch = Patch::Apply(json!({
             "apiVersion": "n8n.slys.dev/v1",
-            "kind": "Instance",
+            "kind": "Single",
             "status": status,
         }));
         instances
@@ -415,9 +415,9 @@ impl Instance {
     fn owner_reference(&self) -> OwnerReference {
         OwnerReference {
             api_version: "n8n.slys.dev/v1".to_string(),
-            kind: "Instance".to_string(),
+            kind: "Single".to_string(),
             name: self.name_any(),
-            uid: self.uid().expect("Instance lacks uid; cannot own children"),
+            uid: self.uid().expect("Single lacks uid; cannot own children"),
             controller: Some(true),
             block_owner_deletion: Some(true),
         }
@@ -529,7 +529,7 @@ fn common_annotations() -> BTreeMap<String, String> {
 
 fn build_deployment(
     name: &str,
-    spec: &InstanceSpec,
+    spec: &SingleSpec,
     key_secret: &SecretKeyRef,
     owner: &OwnerReference,
 ) -> Deployment {
@@ -801,7 +801,7 @@ fn build_data_pvc(
     Some(serde_json::from_value(json).expect("static pvc schema is valid"))
 }
 
-fn build_service(name: &str, spec: &InstanceSpec, owner: &OwnerReference) -> Service {
+fn build_service(name: &str, spec: &SingleSpec, owner: &OwnerReference) -> Service {
     let selector = selector_labels(name);
     let labels = common_labels(name, &spec.image, "workflow-engine");
     let svc_type = spec
@@ -987,7 +987,7 @@ impl State {
 
 pub async fn run(state: State) {
     let client = Client::try_default().await.expect("failed to create kube Client");
-    let api = Api::<Instance>::all(client.clone());
+    let api = Api::<Single>::all(client.clone());
     if let Err(e) = api.list(&ListParams::default().limit(1)).await {
         error!("CRD is not queryable; {e:?}. Is the CRD installed?");
         info!("Installation: cargo run --bin crdgen | kubectl apply -f -");

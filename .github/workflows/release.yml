@@ -85,7 +85,7 @@ jobs:
           version="${{ steps.bump.outputs.new_version || steps.manual.outputs.version }}"
           mkdir -p dist
           cp yaml/crd.yaml dist/crd.yaml
-          cp yaml/instance-sample.yaml dist/instance-sample.yaml
+          cp yaml/single-sample.yaml dist/single-sample.yaml
           sed "s|__IMAGE_TAG__|${version}|g" yaml/install.yaml > dist/install.yaml
           cat dist/crd.yaml > "dist/n8n-rustful-operator-${version}.yaml"
           echo "---" >> "dist/n8n-rustful-operator-${version}.yaml"
@@ -113,6 +113,6 @@ jobs:
           files: |
             dist/crd.yaml
             dist/install.yaml
-            dist/instance-sample.yaml
+            dist/single-sample.yaml
             dist/n8n-rustful-operator-*.yaml
             dist/SHA256SUMS
