@@ -777,6 +777,27 @@ spec:
                 type: object
               workers:
                 properties:
+                  autoscaling:
+                    description: |-
+                      Provision a HorizontalPodAutoscaler for the worker Deployment. When set,
+                      the operator stops managing `spec.replicas` so HPA can drive it.
+                    nullable: true
+                    properties:
+                      maxReplicas:
+                        format: int32
+                        type: integer
+                      minReplicas:
+                        format: int32
+                        type: integer
+                      targetCPUUtilizationPercentage:
+                        description: Average CPU utilisation target (percent). Defaults to 70.
+                        format: int32
+                        nullable: true
+                        type: integer
+                    required:
+                    - maxReplicas
+                    - minReplicas
+                    type: object
                   concurrency:
                     description: Maps to `N8N_CONCURRENCY_PRODUCTION_LIMIT`.
                     format: uint32
@@ -787,6 +808,7 @@ spec:
                     nullable: true
                     type: string
                   replicas:
+                    description: Static replica count. Ignored when `autoscaling` is set (HPA owns the field).
                     format: int32
                     type: integer
                 required:

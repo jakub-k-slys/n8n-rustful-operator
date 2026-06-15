@@ -91,6 +91,20 @@ Feature: n8n operator reconciles Cluster custom resources
     When I apply a Cluster "status" backed by Postgres "pg.example.com" and Redis "redis.example.com" with 3 workers and webhooks
     Then the Cluster "status" has status mainReplicas 1 workerReplicas 3 webhookReplicas 1
 
+  Scenario: Workers autoscale via HPA and operator stops managing spec.replicas
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "hpa" with worker autoscaling min 1 max 3
+    Then a HorizontalPodAutoscaler named "hpa-worker" exists with min 1 max 3 within 60 seconds
+    And the HorizontalPodAutoscaler "hpa-worker" targets Deployment "hpa-worker"
+
+  Scenario: Dropping worker autoscaling removes the HPA
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    And a Cluster "hpa-drop" exists with worker autoscaling min 1 max 3
+    When I update the Cluster "hpa-drop" to have no worker autoscaling
+    Then the HorizontalPodAutoscaler "hpa-drop-worker" is gone within 60 seconds
+
   Scenario: Dropping the webhooks block removes the webhook Deployment
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"
     And a Secret "redis-creds" exists with key "password" set to "rs3cret"

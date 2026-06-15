@@ -4,6 +4,7 @@ use jiff::Timestamp;
 use k8s_openapi::{
     api::{
         apps::v1::Deployment,
+        autoscaling::v2::HorizontalPodAutoscaler,
         core::v1::{PersistentVolumeClaim, Secret, Service, ServicePort},
         networking::v1::Ingress,
     },
@@ -319,12 +320,32 @@ fn default_main_replicas() -> i32 {
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 pub struct WorkerConfig {
+    /// Static replica count. Ignored when `autoscaling` is set (HPA owns the field).
     pub replicas: i32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image: Option<String>,
     /// Maps to `N8N_CONCURRENCY_PRODUCTION_LIMIT`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub concurrency: Option<u32>,
+    /// Provision a HorizontalPodAutoscaler for the worker Deployment. When set,
+    /// the operator stops managing `spec.replicas` so HPA can drive it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub autoscaling: Option<Autoscaling>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+pub struct Autoscaling {
+    #[serde(rename = "minReplicas")]
+    pub min_replicas: i32,
+    #[serde(rename = "maxReplicas")]
+    pub max_replicas: i32,
+    /// Average CPU utilisation target (percent). Defaults to 70.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "targetCPUUtilizationPercentage"
+    )]
+    pub target_cpu_utilization_percentage: Option<i32>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
@@ -688,7 +709,7 @@ impl Cluster {
             &main_name,
             &main_image,
             "main",
-            self.spec.main.replicas,
+            Some(self.spec.main.replicas),
             &common_env,
             &main_vols,
             &main_mounts,
@@ -736,11 +757,17 @@ impl Cluster {
             worker_env.push(env_str("N8N_CONCURRENCY_PRODUCTION_LIMIT", cc.to_string()));
         }
         worker_env.push(env_str("QUEUE_HEALTH_CHECK_ACTIVE", "true"));
+        // When HPA owns spec.replicas, omit the field from our SSA patch.
+        let worker_replicas_field = if self.spec.workers.autoscaling.is_some() {
+            None
+        } else {
+            Some(self.spec.workers.replicas)
+        };
         let worker_dep = build_cluster_deployment(
             &worker_name,
             &worker_image,
             "worker",
-            self.spec.workers.replicas,
+            worker_replicas_field,
             &worker_env,
             &common_vols,
             &common_mounts,
@@ -752,6 +779,23 @@ impl Cluster {
             .await
             .map_err(Error::KubeError)?;
 
+        let hpas: Api<HorizontalPodAutoscaler> = Api::namespaced(client.clone(), &ns);
+        if let Some(as_cfg) = &self.spec.workers.autoscaling {
+            let hpa = build_worker_hpa(&worker_name, &worker_image, as_cfg, &owner);
+            hpas.patch(&worker_name, &ps, &Patch::Apply(&hpa))
+                .await
+                .map_err(Error::KubeError)?;
+        } else if hpas
+            .get_opt(&worker_name)
+            .await
+            .map_err(Error::KubeError)?
+            .is_some()
+        {
+            hpas.delete(&worker_name, &Default::default())
+                .await
+                .map_err(Error::KubeError)?;
+        }
+
         // ----- Webhook role (optional) -----
         let webhook_name = format!("{name}-webhook");
         if let Some(wh) = &self.spec.webhooks {
@@ -762,7 +806,7 @@ impl Cluster {
                 &webhook_name,
                 &wh_image,
                 "webhook",
-                wh.replicas,
+                Some(wh.replicas),
                 &wh_env,
                 &common_vols,
                 &common_mounts,
@@ -959,7 +1003,7 @@ fn build_cluster_deployment(
     name: &str,
     image: &str,
     component: &str,
-    replicas: i32,
+    replicas: Option<i32>,
     env: &[serde_json::Value],
     volumes: &[serde_json::Value],
     mounts: &[serde_json::Value],
@@ -984,6 +1028,19 @@ fn build_cluster_deployment(
     if let Some(cmd) = command {
         container["command"] = json!(cmd);
     }
+    let mut spec = json!({
+        "selector": { "matchLabels": selector },
+        "template": {
+            "metadata": { "labels": labels, "annotations": annotations },
+            "spec": {
+                "volumes": volumes,
+                "containers": [container],
+            }
+        }
+    });
+    if let Some(r) = replicas {
+        spec["replicas"] = json!(r);
+    }
     let json = json!({
         "apiVersion": "apps/v1",
         "kind": "Deployment",
@@ -993,19 +1050,46 @@ fn build_cluster_deployment(
             "annotations": annotations,
             "ownerReferences": [owner],
         },
-        "spec": {
-            "replicas": replicas,
-            "selector": { "matchLabels": selector },
-            "template": {
-                "metadata": { "labels": labels, "annotations": annotations },
-                "spec": {
-                    "volumes": volumes,
-                    "containers": [container],
-                }
-            }
-        }
+        "spec": spec,
     });
     serde_json::from_value(json).expect("static cluster deployment schema is valid")
+}
+
+fn build_worker_hpa(
+    name: &str,
+    image: &str,
+    autoscaling: &Autoscaling,
+    owner: &OwnerReference,
+) -> HorizontalPodAutoscaler {
+    let labels = common_labels(name, image, "worker");
+    let cpu = autoscaling.target_cpu_utilization_percentage.unwrap_or(70);
+    let json = json!({
+        "apiVersion": "autoscaling/v2",
+        "kind": "HorizontalPodAutoscaler",
+        "metadata": {
+            "name": name,
+            "labels": labels,
+            "annotations": common_annotations(),
+            "ownerReferences": [owner],
+        },
+        "spec": {
+            "scaleTargetRef": {
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "name": name,
+            },
+            "minReplicas": autoscaling.min_replicas,
+            "maxReplicas": autoscaling.max_replicas,
+            "metrics": [{
+                "type": "Resource",
+                "resource": {
+                    "name": "cpu",
+                    "target": { "type": "Utilization", "averageUtilization": cpu }
+                }
+            }]
+        }
+    });
+    serde_json::from_value(json).expect("static HPA schema is valid")
 }
 
 fn build_cluster_service(

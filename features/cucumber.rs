@@ -1,6 +1,7 @@
 use cucumber::{World, given, then, when};
 use k8s_openapi::api::{
     apps::v1::Deployment,
+    autoscaling::v2::HorizontalPodAutoscaler,
     core::v1::{PersistentVolumeClaim, Secret, Service},
     networking::v1::Ingress,
 };
@@ -10,9 +11,10 @@ use kube::{
     discovery::ApiResource,
 };
 use n8n_rustful_operator::{
-    Cluster, ClusterSpec, DatabaseSpec, DatabaseSsl, EncryptionKeySpec, GatewayRef, HttpRouteConfig,
-    IngressConfig, MainConfig, MysqlConfig, NetworkingSpec, PersistenceConfig, PostgresConfig, RedisConfig,
-    SecretKeyRef, ServiceConfig, Single, SingleSpec, SqliteConfig, WebhookConfig, WorkerConfig,
+    Autoscaling, Cluster, ClusterSpec, DatabaseSpec, DatabaseSsl, EncryptionKeySpec, GatewayRef,
+    HttpRouteConfig, IngressConfig, MainConfig, MysqlConfig, NetworkingSpec, PersistenceConfig,
+    PostgresConfig, RedisConfig, SecretKeyRef, ServiceConfig, Single, SingleSpec, SqliteConfig,
+    WebhookConfig, WorkerConfig,
 };
 use std::{collections::BTreeMap, time::Duration};
 use tokio::time::{Instant, sleep};
@@ -880,11 +882,7 @@ async fn apply_cluster_full(
             replicas: 1,
             ..Default::default()
         },
-        workers: WorkerConfig {
-            replicas: workers,
-            image: None,
-            concurrency: Some(5),
-        },
+        workers: WorkerConfig { replicas: workers, image: None, concurrency: Some(5), autoscaling: None },
         webhooks: Some(WebhookConfig {
             replicas: 1,
             image: None,
@@ -930,7 +928,7 @@ async fn apply_cluster_with_main_pv(w: &mut E2eWorld, name: String, size: String
             }),
             ..Default::default()
         },
-        workers: WorkerConfig { replicas: 1, image: None, concurrency: None },
+        workers: WorkerConfig { replicas: 1, image: None, concurrency: None, autoscaling: None },
         webhooks: None,
     };
     apply_cluster(w, &name, spec).await;
@@ -956,11 +954,7 @@ async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
             ..Default::default()
         },
         main: MainConfig::default(),
-        workers: WorkerConfig {
-            replicas: 1,
-            image: None,
-            concurrency: None,
-        },
+        workers: WorkerConfig { replicas: 1, image: None, concurrency: None, autoscaling: None },
         webhooks: None,
     };
     apply_cluster(w, &name, spec).await;
@@ -1120,7 +1114,7 @@ async fn apply_cluster_byo_key(
             ..Default::default()
         },
         main: MainConfig { replicas: 1, ..Default::default() },
-        workers: WorkerConfig { replicas: 1, image: None, concurrency: None },
+        workers: WorkerConfig { replicas: 1, image: None, concurrency: None, autoscaling: None },
         webhooks: None,
     };
     apply_cluster(w, &name, spec).await;
@@ -1163,7 +1157,7 @@ async fn apply_cluster_main_ingress(
             }),
             ..Default::default()
         },
-        workers: WorkerConfig { replicas: 1, image: None, concurrency: None },
+        workers: WorkerConfig { replicas: 1, image: None, concurrency: None, autoscaling: None },
         webhooks: None,
     };
     apply_cluster(w, &name, spec).await;
@@ -1199,11 +1193,7 @@ async fn apply_cluster_image_overrides(
             image: Some(main_image),
             ..Default::default()
         },
-        workers: WorkerConfig {
-            replicas: 1,
-            image: Some(worker_image),
-            concurrency: None,
-        },
+        workers: WorkerConfig { replicas: 1, image: Some(worker_image), concurrency: None, autoscaling: None },
         webhooks: None,
     };
     apply_cluster(w, &name, spec).await;
@@ -1231,7 +1221,7 @@ async fn apply_cluster_redis_prefix(w: &mut E2eWorld, name: String, prefix: Stri
             ..Default::default()
         },
         main: MainConfig { replicas: 1, ..Default::default() },
-        workers: WorkerConfig { replicas: 1, image: None, concurrency: None },
+        workers: WorkerConfig { replicas: 1, image: None, concurrency: None, autoscaling: None },
         webhooks: None,
     };
     apply_cluster(w, &name, spec).await;
@@ -1441,7 +1431,7 @@ async fn apply_cluster_main_route(
             }),
             ..Default::default()
         },
-        workers: WorkerConfig { replicas: 1, image: None, concurrency: None },
+        workers: WorkerConfig { replicas: 1, image: None, concurrency: None, autoscaling: None },
         webhooks: None,
     };
     apply_cluster(w, &name, spec).await;
@@ -1497,6 +1487,119 @@ async fn httproute_gone(w: &mut E2eWorld, name: String, secs: u64) {
         let n = n.clone();
         async move {
             let api = http_route_api(client);
+            api.get_opt(&n).await.unwrap().is_none()
+        }
+    })
+    .await;
+}
+
+// ----- HPA -----
+
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with worker autoscaling min (\d+) max (\d+)$"#)]
+async fn apply_cluster_hpa(w: &mut E2eWorld, name: String, min: i32, max: i32) {
+    let spec = ClusterSpec {
+        image: "nginx:alpine".into(),
+        encryption_key: None,
+        database: DatabaseSpec {
+            type_: "postgresdb".into(),
+            sqlite: None,
+            postgres: Some(pg_postgres_config()),
+            mysql: None,
+        },
+        redis: RedisConfig {
+            host: "redis.example.com".into(),
+            port: Some(6379),
+            password_secret: Some(SecretKeyRef {
+                name: "redis-creds".into(),
+                key: "password".into(),
+            }),
+            ..Default::default()
+        },
+        main: MainConfig { replicas: 1, ..Default::default() },
+        workers: WorkerConfig {
+            replicas: 1,
+            image: None,
+            concurrency: None,
+            autoscaling: Some(Autoscaling {
+                min_replicas: min,
+                max_replicas: max,
+                target_cpu_utilization_percentage: None,
+            }),
+        },
+        webhooks: None,
+    };
+    apply_cluster(w, &name, spec).await;
+}
+
+#[given(regex = r#"^a Cluster "([^"]+)" exists with worker autoscaling min (\d+) max (\d+)$"#)]
+async fn cluster_with_hpa_exists(w: &mut E2eWorld, name: String, min: i32, max: i32) {
+    apply_cluster_hpa(w, name.clone(), min, max).await;
+    let client = w.client().clone();
+    let hpa_name = format!("{name}-worker");
+    let hpa_name2 = hpa_name.clone();
+    wait_until(60, &format!("HPA/{hpa_name2} to appear"), move || {
+        let client = client.clone();
+        let n = hpa_name.clone();
+        async move {
+            let api: Api<HorizontalPodAutoscaler> = Api::namespaced(client, NS);
+            api.get_opt(&n).await.unwrap().is_some()
+        }
+    })
+    .await;
+}
+
+#[when(regex = r#"^I update the Cluster "([^"]+)" to have no worker autoscaling$"#)]
+async fn drop_cluster_hpa(w: &mut E2eWorld, name: String) {
+    let api: Api<Cluster> = Api::namespaced(w.client().clone(), NS);
+    let current = api.get(&name).await.expect("Cluster");
+    let mut spec = current.spec.clone();
+    spec.workers.autoscaling = None;
+    let new = Cluster::new(&name, spec);
+    let ssa = PatchParams::apply("cucumber").force();
+    api.patch(&name, &ssa, &Patch::Apply(&new))
+        .await
+        .expect("update Cluster");
+}
+
+#[then(regex = r#"^a HorizontalPodAutoscaler named "([^"]+)" exists with min (\d+) max (\d+) within (\d+) seconds$"#)]
+async fn hpa_min_max(w: &mut E2eWorld, name: String, min: i32, max: i32, secs: u64) {
+    let client = w.client().clone();
+    let n = name.clone();
+    wait_until(secs, &format!("HPA/{name} min={min} max={max}"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        async move {
+            let api: Api<HorizontalPodAutoscaler> = Api::namespaced(client, NS);
+            match api.get_opt(&n).await.unwrap() {
+                Some(h) => match h.spec {
+                    Some(s) => s.min_replicas == Some(min) && s.max_replicas == max,
+                    None => false,
+                },
+                None => false,
+            }
+        }
+    })
+    .await;
+}
+
+#[then(regex = r#"^the HorizontalPodAutoscaler "([^"]+)" targets Deployment "([^"]+)"$"#)]
+async fn hpa_target(w: &mut E2eWorld, name: String, target: String) {
+    let api: Api<HorizontalPodAutoscaler> = Api::namespaced(w.client().clone(), NS);
+    let hpa = api.get(&name).await.expect("HPA");
+    let r = hpa.spec.expect("hpa spec").scale_target_ref;
+    assert_eq!(r.kind, "Deployment");
+    assert_eq!(r.name, target);
+}
+
+#[then(regex = r#"^the HorizontalPodAutoscaler "([^"]+)" is gone within (\d+) seconds$"#)]
+async fn hpa_gone(w: &mut E2eWorld, name: String, secs: u64) {
+    let client = w.client().clone();
+    let n = name.clone();
+    wait_until(secs, &format!("HPA/{name} gone"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        async move {
+            let api: Api<HorizontalPodAutoscaler> = Api::namespaced(client, NS);
             api.get_opt(&n).await.unwrap().is_none()
         }
     })
