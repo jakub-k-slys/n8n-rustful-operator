@@ -114,6 +114,20 @@ Feature: n8n operator reconciles Single custom resources
     And the Deployment "labelled" has label "app.kubernetes.io/version=1.70.0"
     And the Deployment "labelled" has annotation "n8n.slys.dev/operator-version"
 
+  Scenario: Single respects spec.replicas
+    When I apply a Single "scaled" with image "nginx:alpine" and replicas 3
+    Then a Deployment named "scaled" exists in namespace "default" within 60 seconds
+    And the Deployment "scaled" has 3 replicas
+
+  Scenario: Single Service can be exposed as LoadBalancer
+    When I apply a Single "lb" with image "nginx:alpine" and service type "LoadBalancer"
+    Then the Service "lb" has type "LoadBalancer"
+
+  Scenario: Ingress with TLS attaches the named Secret
+    When I apply a Single "tls" with ingress class "nginx" host "tls.example.com" and TLS secret "tls-cert"
+    Then an Ingress named "tls" exists with host "tls.example.com" within 60 seconds
+    And the Ingress "tls" terminates TLS with secret "tls-cert"
+
   Scenario: Deleting one Single leaves the other untouched
     Given a Single "stayer" exists
     And a Single "leaver" exists

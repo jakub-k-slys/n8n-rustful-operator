@@ -1030,6 +1030,328 @@ async fn deployment_gone(w: &mut E2eWorld, name: String, secs: u64) {
     .await;
 }
 
+// ----- extra Single steps -----
+
+#[when(regex = r#"^I apply a Single "([^"]+)" with image "([^"]+)" and replicas (\d+)$"#)]
+async fn apply_single_replicas(w: &mut E2eWorld, name: String, image: String, replicas: i32) {
+    let mut spec = base_spec(&image);
+    spec.replicas = replicas;
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Single "([^"]+)" with ingress class "([^"]+)" host "([^"]+)" and TLS secret "([^"]+)"$"#)]
+async fn apply_single_ingress_tls(
+    w: &mut E2eWorld,
+    name: String,
+    class: String,
+    host: String,
+    tls: String,
+) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.host = Some(host);
+    spec.networking = Some(NetworkingSpec {
+        ingress: Some(IngressConfig {
+            class_name: Some(class),
+            tls_secret_name: Some(tls),
+        }),
+        http_route: None,
+    });
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[then(regex = r#"^the Deployment "([^"]+)" has (\d+) replicas$"#)]
+async fn deployment_has_replicas(w: &mut E2eWorld, name: String, replicas: i32) {
+    let client = w.client().clone();
+    let n = name.clone();
+    wait_until(60, &format!("Deployment/{name} replicas={replicas}"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        async move {
+            let api: Api<Deployment> = Api::namespaced(client, NS);
+            match api.get_opt(&n).await.unwrap() {
+                Some(d) => d.spec.and_then(|s| s.replicas) == Some(replicas),
+                None => false,
+            }
+        }
+    })
+    .await;
+}
+
+#[then(regex = r#"^the Ingress "([^"]+)" terminates TLS with secret "([^"]+)"$"#)]
+async fn ingress_tls(w: &mut E2eWorld, name: String, secret: String) {
+    let api: Api<Ingress> = Api::namespaced(w.client().clone(), NS);
+    let ing = api.get(&name).await.expect("Ingress");
+    let tls = ing
+        .spec
+        .and_then(|s| s.tls)
+        .and_then(|v| v.into_iter().next())
+        .expect("no TLS block");
+    assert_eq!(tls.secret_name.as_deref(), Some(secret.as_str()));
+}
+
+// ----- extra Cluster steps -----
+
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with encryption key from secret "([^"]+)" key "([^"]+)"$"#)]
+async fn apply_cluster_byo_key(
+    w: &mut E2eWorld,
+    name: String,
+    secret: String,
+    key: String,
+) {
+    let spec = ClusterSpec {
+        image: "nginx:alpine".into(),
+        encryption_key: Some(EncryptionKeySpec {
+            secret_ref: Some(SecretKeyRef { name: secret, key }),
+        }),
+        database: DatabaseSpec {
+            type_: "postgresdb".into(),
+            sqlite: None,
+            postgres: Some(pg_postgres_config()),
+            mysql: None,
+        },
+        redis: RedisConfig {
+            host: "redis.example.com".into(),
+            port: Some(6379),
+            password_secret: Some(SecretKeyRef {
+                name: "redis-creds".into(),
+                key: "password".into(),
+            }),
+            ..Default::default()
+        },
+        main: MainConfig { replicas: 1, ..Default::default() },
+        workers: WorkerConfig { replicas: 1, image: None, concurrency: None },
+        webhooks: None,
+    };
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with main ingress class "([^"]+)" and host "([^"]+)"$"#)]
+async fn apply_cluster_main_ingress(
+    w: &mut E2eWorld,
+    name: String,
+    class: String,
+    host: String,
+) {
+    let spec = ClusterSpec {
+        image: "nginx:alpine".into(),
+        encryption_key: None,
+        database: DatabaseSpec {
+            type_: "postgresdb".into(),
+            sqlite: None,
+            postgres: Some(pg_postgres_config()),
+            mysql: None,
+        },
+        redis: RedisConfig {
+            host: "redis.example.com".into(),
+            port: Some(6379),
+            password_secret: Some(SecretKeyRef {
+                name: "redis-creds".into(),
+                key: "password".into(),
+            }),
+            ..Default::default()
+        },
+        main: MainConfig {
+            replicas: 1,
+            host: Some(host),
+            networking: Some(NetworkingSpec {
+                ingress: Some(IngressConfig {
+                    class_name: Some(class),
+                    tls_secret_name: None,
+                }),
+                http_route: None,
+            }),
+            ..Default::default()
+        },
+        workers: WorkerConfig { replicas: 1, image: None, concurrency: None },
+        webhooks: None,
+    };
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with main image "([^"]+)" and worker image "([^"]+)"$"#)]
+async fn apply_cluster_image_overrides(
+    w: &mut E2eWorld,
+    name: String,
+    main_image: String,
+    worker_image: String,
+) {
+    let spec = ClusterSpec {
+        image: "nginx:alpine".into(),
+        encryption_key: None,
+        database: DatabaseSpec {
+            type_: "postgresdb".into(),
+            sqlite: None,
+            postgres: Some(pg_postgres_config()),
+            mysql: None,
+        },
+        redis: RedisConfig {
+            host: "redis.example.com".into(),
+            port: Some(6379),
+            password_secret: Some(SecretKeyRef {
+                name: "redis-creds".into(),
+                key: "password".into(),
+            }),
+            ..Default::default()
+        },
+        main: MainConfig {
+            replicas: 1,
+            image: Some(main_image),
+            ..Default::default()
+        },
+        workers: WorkerConfig {
+            replicas: 1,
+            image: Some(worker_image),
+            concurrency: None,
+        },
+        webhooks: None,
+    };
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with Redis prefix "([^"]+)"$"#)]
+async fn apply_cluster_redis_prefix(w: &mut E2eWorld, name: String, prefix: String) {
+    let spec = ClusterSpec {
+        image: "nginx:alpine".into(),
+        encryption_key: None,
+        database: DatabaseSpec {
+            type_: "postgresdb".into(),
+            sqlite: None,
+            postgres: Some(pg_postgres_config()),
+            mysql: None,
+        },
+        redis: RedisConfig {
+            host: "redis.example.com".into(),
+            port: Some(6379),
+            password_secret: Some(SecretKeyRef {
+                name: "redis-creds".into(),
+                key: "password".into(),
+            }),
+            prefix: Some(prefix),
+            ..Default::default()
+        },
+        main: MainConfig { replicas: 1, ..Default::default() },
+        workers: WorkerConfig { replicas: 1, image: None, concurrency: None },
+        webhooks: None,
+    };
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I delete the Cluster "([^"]+)"$"#)]
+async fn when_delete_cluster(w: &mut E2eWorld, name: String) {
+    let api: Api<Cluster> = Api::namespaced(w.client().clone(), NS);
+    api.delete(&name, &DeleteParams::default())
+        .await
+        .expect("delete Cluster");
+}
+
+#[then(regex = r#"^no Service named "([^"]+)" exists$"#)]
+async fn no_service(w: &mut E2eWorld, name: String) {
+    let api: Api<Service> = Api::namespaced(w.client().clone(), NS);
+    // grace so the reconciler could mistakenly create one
+    sleep(Duration::from_secs(3)).await;
+    assert!(
+        api.get_opt(&name).await.unwrap().is_none(),
+        "Service/{name} unexpectedly exists"
+    );
+}
+
+#[then(regex = r#"^the Deployment "([^"]+)" runs command "([^"]+)"$"#)]
+async fn deployment_runs_command(w: &mut E2eWorld, name: String, command: String) {
+    let expected: Vec<String> = command.split_whitespace().map(|s| s.to_string()).collect();
+    let client = w.client().clone();
+    let n = name.clone();
+    let exp = expected.clone();
+    wait_until(60, &format!("Deployment/{name} command={command:?}"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        let exp = exp.clone();
+        async move {
+            let api: Api<Deployment> = Api::namespaced(client, NS);
+            match api.get_opt(&n).await.unwrap() {
+                Some(d) => d
+                    .spec
+                    .and_then(|s| s.template.spec)
+                    .and_then(|s| s.containers.into_iter().next())
+                    .and_then(|c| c.command)
+                    == Some(exp.clone()),
+                None => false,
+            }
+        }
+    })
+    .await;
+}
+
+#[then(regex = r#"^the Deployment "([^"]+)" runs image "([^"]+)"$"#)]
+async fn deployment_runs_image(w: &mut E2eWorld, name: String, image: String) {
+    let client = w.client().clone();
+    let n = name.clone();
+    let img = image.clone();
+    wait_until(60, &format!("Deployment/{name} image={image}"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        let img = img.clone();
+        async move {
+            let api: Api<Deployment> = Api::namespaced(client, NS);
+            match api.get_opt(&n).await.unwrap() {
+                Some(d) => d
+                    .spec
+                    .and_then(|s| s.template.spec)
+                    .and_then(|s| s.containers.into_iter().next())
+                    .and_then(|c| c.image)
+                    == Some(img.clone()),
+                None => false,
+            }
+        }
+    })
+    .await;
+}
+
+#[then(regex = r#"^the Cluster "([^"]+)" has status mainReplicas (\d+) workerReplicas (\d+) webhookReplicas (\d+)$"#)]
+async fn cluster_status_replicas(
+    w: &mut E2eWorld,
+    name: String,
+    main: i32,
+    worker: i32,
+    webhook: i32,
+) {
+    let client = w.client().clone();
+    let n = name.clone();
+    wait_until(60, &format!("Cluster/{name} status replicas"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        async move {
+            let api: Api<Cluster> = Api::namespaced(client, NS);
+            match api.get_opt(&n).await.unwrap() {
+                Some(c) => match c.status {
+                    Some(s) => {
+                        s.main_replicas == main
+                            && s.worker_replicas == worker
+                            && s.webhook_replicas == webhook
+                    }
+                    None => false,
+                },
+                None => false,
+            }
+        }
+    })
+    .await;
+}
+
+#[then(regex = r#"^the Cluster "([^"]+)" is gone within (\d+) seconds$"#)]
+async fn cluster_gone(w: &mut E2eWorld, name: String, secs: u64) {
+    let client = w.client().clone();
+    let n = name.clone();
+    wait_until(secs, &format!("Cluster/{name} gone"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        async move {
+            let api: Api<Cluster> = Api::namespaced(client, NS);
+            api.get_opt(&n).await.unwrap().is_none()
+        }
+    })
+    .await;
+}
+
 // ----- main -----
 
 #[tokio::main]
