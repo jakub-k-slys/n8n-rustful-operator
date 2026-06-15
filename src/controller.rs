@@ -130,7 +130,7 @@ fn default_secret_key() -> String {
     "encryption_key".to_string()
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 pub struct DatabaseSpec {
     /// `sqlite` (default), `postgresdb`, `mysqldb` or `mariadb` — maps directly to `DB_TYPE`.
     #[serde(default = "default_db_type", rename = "type")]
@@ -254,6 +254,114 @@ pub struct SingleStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
     /// Name of the Secret used as N8N_ENCRYPTION_KEY (managed or referenced).
+    #[serde(skip_serializing_if = "Option::is_none", rename = "encryptionKeySecret")]
+    pub encryption_key_secret: Option<String>,
+}
+
+// =====================================================================
+// Cluster CRD — queue-mode n8n: main + workers + (optional) webhooks.
+// All roles share Redis, Postgres (sqlite rejected) and the encryption key.
+// =====================================================================
+
+pub static CLUSTER_FINALIZER: &str = "clusters.n8n.slys.dev";
+
+#[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[cfg_attr(test, derive(Default))]
+#[kube(
+    kind = "Cluster",
+    group = "n8n.slys.dev",
+    version = "v1",
+    namespaced,
+    shortname = "n8nc",
+    plural = "clusters",
+    status = "ClusterStatus"
+)]
+pub struct ClusterSpec {
+    /// Cascading default image for every role. Each role can override.
+    #[serde(default = "default_image")]
+    pub image: String,
+    /// Shared `N8N_ENCRYPTION_KEY`. Omitted → auto-generated `<cluster>-encryption-key`.
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "encryptionKey")]
+    pub encryption_key: Option<EncryptionKeySpec>,
+    /// Database backend. Queue mode requires a shared DB — sqlite is rejected.
+    pub database: DatabaseSpec,
+    /// Redis-backed Bull/BullMQ queue.
+    pub redis: RedisConfig,
+    #[serde(default)]
+    pub main: MainConfig,
+    pub workers: WorkerConfig,
+    /// Optional dedicated webhook pool (sets `N8N_DISABLE_PRODUCTION_MAIN_PROCESS=true`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub webhooks: Option<WebhookConfig>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
+pub struct MainConfig {
+    #[serde(default = "default_main_replicas")]
+    pub replicas: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service: Option<ServiceConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub networking: Option<NetworkingSpec>,
+}
+fn default_main_replicas() -> i32 {
+    1
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
+pub struct WorkerConfig {
+    pub replicas: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+    /// Maps to `N8N_CONCURRENCY_PRODUCTION_LIMIT`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub concurrency: Option<u32>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+pub struct WebhookConfig {
+    pub replicas: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service: Option<ServiceConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub networking: Option<NetworkingSpec>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
+pub struct RedisConfig {
+    pub host: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub db: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "passwordSecret")]
+    pub password_secret: Option<SecretKeyRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "usernameSecret")]
+    pub username_secret: Option<SecretKeyRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls: Option<bool>,
+    /// `QUEUE_BULL_PREFIX` for namespacing within a shared Redis instance.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Default, Debug, JsonSchema)]
+pub struct ClusterStatus {
+    pub ready: bool,
+    #[serde(rename = "mainReplicas")]
+    pub main_replicas: i32,
+    #[serde(rename = "workerReplicas")]
+    pub worker_replicas: i32,
+    #[serde(rename = "webhookReplicas")]
+    pub webhook_replicas: i32,
     #[serde(skip_serializing_if = "Option::is_none", rename = "encryptionKeySecret")]
     pub encryption_key_secret: Option<String>,
 }
@@ -451,7 +559,11 @@ impl Single {
                     name: Some(name.clone()),
                     namespace: Some(ns.to_string()),
                     owner_references: Some(vec![owner.clone()]),
-                    labels: Some(common_labels(&self.name_any(), &self.spec.image, "encryption-key")),
+                    labels: Some(common_labels(
+                        &self.name_any(),
+                        &self.spec.image,
+                        "encryption-key",
+                    )),
                     annotations: Some(common_annotations()),
                     ..Default::default()
                 },
@@ -484,6 +596,477 @@ impl Single {
             .map_err(Error::KubeError)?;
         Ok(Action::await_change())
     }
+}
+
+// =====================================================================
+// Cluster reconciler (queue mode)
+// =====================================================================
+
+#[instrument(skip(ctx, c), fields(trace_id))]
+async fn reconcile_cluster(c: Arc<Cluster>, ctx: Arc<Context>) -> Result<Action> {
+    let trace_id = telemetry::get_trace_id();
+    if trace_id != opentelemetry::trace::TraceId::INVALID {
+        Span::current().record("trace_id", field::display(&trace_id));
+    }
+    let _timer = ctx.metrics.reconcile.count_and_measure(&trace_id);
+    ctx.diagnostics.write().await.last_event = Timestamp::now();
+    let ns = c.namespace().unwrap();
+    let api: Api<Cluster> = Api::namespaced(ctx.client.clone(), &ns);
+    info!("Reconciling Cluster \"{}\" in {}", c.name_any(), ns);
+    finalizer(&api, CLUSTER_FINALIZER, c, |event| async {
+        match event {
+            Finalizer::Apply(x) => x.reconcile(ctx.clone()).await,
+            Finalizer::Cleanup(x) => x.cleanup(ctx.clone()).await,
+        }
+    })
+    .await
+    .map_err(|e| Error::FinalizerError(Box::new(e)))
+}
+
+fn cluster_error_policy(_c: Arc<Cluster>, error: &Error, _ctx: Arc<Context>) -> Action {
+    warn!("cluster reconcile failed: {error:?}");
+    Action::requeue(Duration::from_secs(5 * 60))
+}
+
+impl Cluster {
+    async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action> {
+        let client = ctx.client.clone();
+        let oref = self.object_ref(&());
+        let ns = self.namespace().unwrap();
+        let name = self.name_any();
+        let ps = PatchParams::apply("n8n-rustful-operator").force();
+
+        validate_cluster(self)?;
+        let owner = self.owner_reference();
+
+        let key_secret = self.resolve_cluster_encryption_secret(&ctx, &ns, &owner).await?;
+        let common_env = build_cluster_common_env(self, &key_secret);
+        let (common_vols, common_mounts) = build_db_volumes(&name, &self.spec.database);
+
+        let deployments: Api<Deployment> = Api::namespaced(client.clone(), &ns);
+        let services: Api<Service> = Api::namespaced(client.clone(), &ns);
+        let ingresses: Api<Ingress> = Api::namespaced(client.clone(), &ns);
+        let clusters: Api<Cluster> = Api::namespaced(client.clone(), &ns);
+
+        // ----- Main role -----
+        let main_name = format!("{name}-main");
+        let main_image = self
+            .spec
+            .main
+            .image
+            .clone()
+            .unwrap_or_else(|| self.spec.image.clone());
+        let main_dep = build_cluster_deployment(
+            &main_name,
+            &main_image,
+            "main",
+            self.spec.main.replicas,
+            &common_env,
+            &common_vols,
+            &common_mounts,
+            None,
+            &owner,
+        );
+        deployments
+            .patch(&main_name, &ps, &Patch::Apply(&main_dep))
+            .await
+            .map_err(Error::KubeError)?;
+        let main_svc = build_cluster_service(
+            &main_name,
+            &main_image,
+            "main",
+            self.spec.main.service.as_ref(),
+            &owner,
+        );
+        services
+            .patch(&main_name, &ps, &Patch::Apply(&main_svc))
+            .await
+            .map_err(Error::KubeError)?;
+        reconcile_role_networking(
+            &client,
+            &ns,
+            &main_name,
+            &main_image,
+            "main",
+            self.spec.main.host.as_deref(),
+            self.spec.main.networking.as_ref(),
+            &owner,
+            &ps,
+        )
+        .await?;
+
+        // ----- Worker role -----
+        let worker_name = format!("{name}-worker");
+        let worker_image = self
+            .spec
+            .workers
+            .image
+            .clone()
+            .unwrap_or_else(|| self.spec.image.clone());
+        let mut worker_env = common_env.clone();
+        if let Some(cc) = self.spec.workers.concurrency {
+            worker_env.push(env_str("N8N_CONCURRENCY_PRODUCTION_LIMIT", cc.to_string()));
+        }
+        worker_env.push(env_str("QUEUE_HEALTH_CHECK_ACTIVE", "true"));
+        let worker_dep = build_cluster_deployment(
+            &worker_name,
+            &worker_image,
+            "worker",
+            self.spec.workers.replicas,
+            &worker_env,
+            &common_vols,
+            &common_mounts,
+            Some(vec!["n8n".to_string(), "worker".to_string()]),
+            &owner,
+        );
+        deployments
+            .patch(&worker_name, &ps, &Patch::Apply(&worker_dep))
+            .await
+            .map_err(Error::KubeError)?;
+
+        // ----- Webhook role (optional) -----
+        let webhook_name = format!("{name}-webhook");
+        if let Some(wh) = &self.spec.webhooks {
+            let wh_image = wh.image.clone().unwrap_or_else(|| self.spec.image.clone());
+            let mut wh_env = common_env.clone();
+            wh_env.push(env_str("N8N_DISABLE_PRODUCTION_MAIN_PROCESS", "true"));
+            let wh_dep = build_cluster_deployment(
+                &webhook_name,
+                &wh_image,
+                "webhook",
+                wh.replicas,
+                &wh_env,
+                &common_vols,
+                &common_mounts,
+                Some(vec!["n8n".to_string(), "webhook".to_string()]),
+                &owner,
+            );
+            deployments
+                .patch(&webhook_name, &ps, &Patch::Apply(&wh_dep))
+                .await
+                .map_err(Error::KubeError)?;
+            let wh_svc =
+                build_cluster_service(&webhook_name, &wh_image, "webhook", wh.service.as_ref(), &owner);
+            services
+                .patch(&webhook_name, &ps, &Patch::Apply(&wh_svc))
+                .await
+                .map_err(Error::KubeError)?;
+            reconcile_role_networking(
+                &client,
+                &ns,
+                &webhook_name,
+                &wh_image,
+                "webhook",
+                wh.host.as_deref(),
+                wh.networking.as_ref(),
+                &owner,
+                &ps,
+            )
+            .await?;
+        } else {
+            // declarative cleanup of webhook children if they once existed
+            let _ = deployments.delete(&webhook_name, &Default::default()).await;
+            let _ = services.delete(&webhook_name, &Default::default()).await;
+            let _ = ingresses.delete(&webhook_name, &Default::default()).await;
+            let _ = delete_http_route(&client, &ns, &webhook_name).await;
+        }
+
+        ctx.recorder
+            .publish(
+                &Event {
+                    type_: EventType::Normal,
+                    reason: "Applied".into(),
+                    note: Some(format!("Applied cluster children for `{name}`")),
+                    action: "Reconciling".into(),
+                    secondary: None,
+                },
+                &oref,
+            )
+            .await
+            .map_err(Error::KubeError)?;
+
+        let status = ClusterStatus {
+            ready: true,
+            main_replicas: self.spec.main.replicas,
+            worker_replicas: self.spec.workers.replicas,
+            webhook_replicas: self.spec.webhooks.as_ref().map(|w| w.replicas).unwrap_or(0),
+            encryption_key_secret: Some(key_secret.name.clone()),
+        };
+        let patch = Patch::Apply(json!({
+            "apiVersion": "n8n.slys.dev/v1",
+            "kind": "Cluster",
+            "status": status,
+        }));
+        clusters
+            .patch_status(&name, &ps, &patch)
+            .await
+            .map_err(Error::KubeError)?;
+
+        Ok(Action::requeue(Duration::from_secs(5 * 60)))
+    }
+
+    async fn cleanup(&self, ctx: Arc<Context>) -> Result<Action> {
+        let oref = self.object_ref(&());
+        ctx.recorder
+            .publish(
+                &Event {
+                    type_: EventType::Normal,
+                    reason: "DeleteRequested".into(),
+                    note: Some(format!("Delete cluster `{}`", self.name_any())),
+                    action: "Deleting".into(),
+                    secondary: None,
+                },
+                &oref,
+            )
+            .await
+            .map_err(Error::KubeError)?;
+        Ok(Action::await_change())
+    }
+
+    fn owner_reference(&self) -> OwnerReference {
+        OwnerReference {
+            api_version: "n8n.slys.dev/v1".to_string(),
+            kind: "Cluster".to_string(),
+            name: self.name_any(),
+            uid: self.uid().expect("Cluster lacks uid; cannot own children"),
+            controller: Some(true),
+            block_owner_deletion: Some(true),
+        }
+    }
+
+    async fn resolve_cluster_encryption_secret(
+        &self,
+        ctx: &Context,
+        ns: &str,
+        owner: &OwnerReference,
+    ) -> Result<SecretKeyRef> {
+        if let Some(spec) = &self.spec.encryption_key
+            && let Some(r) = &spec.secret_ref
+        {
+            return Ok(r.clone());
+        }
+        let name = format!("{}-encryption-key", self.name_any());
+        let key = "encryption_key".to_string();
+        let secrets: Api<Secret> = Api::namespaced(ctx.client.clone(), ns);
+        if secrets.get_opt(&name).await.map_err(Error::KubeError)?.is_none() {
+            let mut buf = [0u8; 32];
+            rand::rng().fill_bytes(&mut buf);
+            let value = hex::encode(buf);
+            let mut data = BTreeMap::new();
+            data.insert(key.clone(), value);
+            let secret = Secret {
+                metadata: ObjectMeta {
+                    name: Some(name.clone()),
+                    namespace: Some(ns.to_string()),
+                    owner_references: Some(vec![owner.clone()]),
+                    labels: Some(common_labels(
+                        &self.name_any(),
+                        &self.spec.image,
+                        "encryption-key",
+                    )),
+                    annotations: Some(common_annotations()),
+                    ..Default::default()
+                },
+                string_data: Some(data),
+                type_: Some("Opaque".to_string()),
+                ..Default::default()
+            };
+            secrets
+                .create(&Default::default(), &secret)
+                .await
+                .map_err(Error::KubeError)?;
+        }
+        Ok(SecretKeyRef { name, key })
+    }
+}
+
+fn validate_cluster(c: &Cluster) -> Result<()> {
+    validate_database(&c.spec.database)?;
+    if c.spec.database.type_ == "sqlite" {
+        return Err(Error::IllegalCluster(
+            "queue mode requires a shared DB; sqlite is not supported".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn build_redis_env(redis: &RedisConfig) -> Vec<serde_json::Value> {
+    let mut out = vec![json!({ "name": "QUEUE_BULL_REDIS_HOST", "value": redis.host })];
+    if let Some(p) = redis.port {
+        out.push(env_str("QUEUE_BULL_REDIS_PORT", p.to_string()));
+    }
+    if let Some(d) = redis.db {
+        out.push(env_str("QUEUE_BULL_REDIS_DB", d.to_string()));
+    }
+    if let Some(s) = &redis.password_secret {
+        out.push(env_secret("QUEUE_BULL_REDIS_PASSWORD", s));
+    }
+    if let Some(s) = &redis.username_secret {
+        out.push(env_secret("QUEUE_BULL_REDIS_USERNAME", s));
+    }
+    if let Some(t) = redis.tls {
+        out.push(env_str("QUEUE_BULL_REDIS_TLS", t.to_string()));
+    }
+    if let Some(p) = &redis.prefix {
+        out.push(json!({ "name": "QUEUE_BULL_PREFIX", "value": p }));
+    }
+    out
+}
+
+fn build_cluster_common_env(c: &Cluster, key_secret: &SecretKeyRef) -> Vec<serde_json::Value> {
+    let mut env = vec![
+        env_str("EXECUTIONS_MODE", "queue"),
+        json!({
+            "name": "N8N_ENCRYPTION_KEY",
+            "valueFrom": { "secretKeyRef": { "name": key_secret.name, "key": key_secret.key } }
+        }),
+    ];
+    env.extend(build_db_env(&c.spec.database));
+    env.extend(build_redis_env(&c.spec.redis));
+    env
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_cluster_deployment(
+    name: &str,
+    image: &str,
+    component: &str,
+    replicas: i32,
+    env: &[serde_json::Value],
+    volumes: &[serde_json::Value],
+    mounts: &[serde_json::Value],
+    command: Option<Vec<String>>,
+    owner: &OwnerReference,
+) -> Deployment {
+    let selector = selector_labels(name);
+    let labels = common_labels(name, image, component);
+    let annotations = common_annotations();
+    let mut container = json!({
+        "name": "n8n",
+        "image": image,
+        "ports": [{ "containerPort": 5678, "name": "http" }],
+        "env": env,
+        "volumeMounts": mounts,
+        "readinessProbe": {
+            "httpGet": { "path": "/healthz", "port": "http" },
+            "initialDelaySeconds": 10,
+            "periodSeconds": 10
+        }
+    });
+    if let Some(cmd) = command {
+        container["command"] = json!(cmd);
+    }
+    let json = json!({
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+            "name": name,
+            "labels": labels,
+            "annotations": annotations,
+            "ownerReferences": [owner],
+        },
+        "spec": {
+            "replicas": replicas,
+            "selector": { "matchLabels": selector },
+            "template": {
+                "metadata": { "labels": labels, "annotations": annotations },
+                "spec": {
+                    "volumes": volumes,
+                    "containers": [container],
+                }
+            }
+        }
+    });
+    serde_json::from_value(json).expect("static cluster deployment schema is valid")
+}
+
+fn build_cluster_service(
+    name: &str,
+    image: &str,
+    component: &str,
+    svc: Option<&ServiceConfig>,
+    owner: &OwnerReference,
+) -> Service {
+    let selector = selector_labels(name);
+    let labels = common_labels(name, image, component);
+    let svc_type = svc.map(|s| s.type_.clone()).unwrap_or_else(default_service_type);
+    Service {
+        metadata: ObjectMeta {
+            name: Some(name.to_string()),
+            labels: Some(labels),
+            annotations: Some(common_annotations()),
+            owner_references: Some(vec![owner.clone()]),
+            ..Default::default()
+        },
+        spec: Some(k8s_openapi::api::core::v1::ServiceSpec {
+            selector: Some(selector),
+            ports: Some(vec![ServicePort {
+                name: Some("http".to_string()),
+                port: 5678,
+                target_port: Some(IntOrString::String("http".to_string())),
+                protocol: Some("TCP".to_string()),
+                ..Default::default()
+            }]),
+            type_: Some(svc_type),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn reconcile_role_networking(
+    client: &Client,
+    ns: &str,
+    name: &str,
+    image: &str,
+    component: &str,
+    host: Option<&str>,
+    net: Option<&NetworkingSpec>,
+    owner: &OwnerReference,
+    ps: &PatchParams,
+) -> Result<()> {
+    if let Some(net) = net
+        && net.ingress.is_some()
+        && net.http_route.is_some()
+    {
+        return Err(Error::ConflictingNetworking);
+    }
+    let want_ingress = net.and_then(|n| n.ingress.as_ref());
+    let want_route = net.and_then(|n| n.http_route.as_ref());
+    let ingress_api: Api<Ingress> = Api::namespaced(client.clone(), ns);
+    if let Some(ing_cfg) = want_ingress {
+        let host = host.unwrap_or("");
+        let mut ingress = build_ingress(name, image, host, ing_cfg, owner);
+        // Override the component label that build_ingress sets to "ingress".
+        if let Some(meta_labels) = ingress.metadata.labels.as_mut() {
+            meta_labels.insert(
+                "app.kubernetes.io/component".to_string(),
+                format!("{component}-ingress"),
+            );
+        }
+        ingress_api
+            .patch(name, ps, &Patch::Apply(&ingress))
+            .await
+            .map_err(Error::KubeError)?;
+    } else if ingress_api
+        .get_opt(name)
+        .await
+        .map_err(Error::KubeError)?
+        .is_some()
+    {
+        ingress_api
+            .delete(name, &Default::default())
+            .await
+            .map_err(Error::KubeError)?;
+    }
+    if let Some(rt_cfg) = want_route {
+        let host = host.unwrap_or("");
+        apply_http_route(client, ns, name, image, host, rt_cfg, owner, ps).await?;
+    } else {
+        let _ = delete_http_route(client, ns, name).await;
+    }
+    Ok(())
 }
 
 /// Stable subset used as `Deployment.spec.selector` and `Service.spec.selector`.
@@ -987,16 +1570,28 @@ impl State {
 
 pub async fn run(state: State) {
     let client = Client::try_default().await.expect("failed to create kube Client");
-    let api = Api::<Single>::all(client.clone());
-    if let Err(e) = api.list(&ListParams::default().limit(1)).await {
-        error!("CRD is not queryable; {e:?}. Is the CRD installed?");
+    let singles = Api::<Single>::all(client.clone());
+    if let Err(e) = singles.list(&ListParams::default().limit(1)).await {
+        error!("Single CRD is not queryable; {e:?}. Is it installed?");
         info!("Installation: cargo run --bin crdgen | kubectl apply -f -");
         std::process::exit(1);
     }
-    Controller::new(api, Config::default().any_semantic())
+    let clusters = Api::<Cluster>::all(client.clone());
+    if let Err(e) = clusters.list(&ListParams::default().limit(1)).await {
+        error!("Cluster CRD is not queryable; {e:?}. Is it installed?");
+        info!("Installation: cargo run --bin crdgen | kubectl apply -f -");
+        std::process::exit(1);
+    }
+    let ctx = state.to_context(client).await;
+    let single_ctrl = Controller::new(singles, Config::default().any_semantic())
         .shutdown_on_signal()
-        .run(reconcile, error_policy, state.to_context(client).await)
+        .run(reconcile, error_policy, ctx.clone())
         .filter_map(|x| async move { std::result::Result::ok(x) })
-        .for_each(|_| futures::future::ready(()))
-        .await;
+        .for_each(|_| futures::future::ready(()));
+    let cluster_ctrl = Controller::new(clusters, Config::default().any_semantic())
+        .shutdown_on_signal()
+        .run(reconcile_cluster, cluster_error_policy, ctx)
+        .filter_map(|x| async move { std::result::Result::ok(x) })
+        .for_each(|_| futures::future::ready(()));
+    futures::future::join(single_ctrl, cluster_ctrl).await;
 }

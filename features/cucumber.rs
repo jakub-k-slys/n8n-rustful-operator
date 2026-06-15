@@ -9,9 +9,9 @@ use kube::{
     api::{Api, DeleteParams, ObjectMeta, Patch, PatchParams, ResourceExt},
 };
 use n8n_rustful_operator::{
-    DatabaseSpec, DatabaseSsl, EncryptionKeySpec, GatewayRef, HttpRouteConfig, IngressConfig, Single,
-    SingleSpec, MysqlConfig, NetworkingSpec, PersistenceConfig, PostgresConfig, SecretKeyRef,
-    ServiceConfig, SqliteConfig,
+    Cluster, ClusterSpec, DatabaseSpec, DatabaseSsl, EncryptionKeySpec, GatewayRef, HttpRouteConfig,
+    IngressConfig, MainConfig, MysqlConfig, NetworkingSpec, PersistenceConfig, PostgresConfig, RedisConfig,
+    SecretKeyRef, ServiceConfig, Single, SingleSpec, SqliteConfig, WebhookConfig, WorkerConfig,
 };
 use std::{collections::BTreeMap, time::Duration};
 use tokio::time::{Instant, sleep};
@@ -264,11 +264,12 @@ async fn service_exposes_port(w: &mut E2eWorld, name: String, port: i32) {
         async move {
             let api: Api<Service> = Api::namespaced(client, NS);
             match api.get_opt(&n).await.unwrap() {
-                Some(svc) => svc
-                    .spec
-                    .and_then(|s| s.ports)
-                    .and_then(|ports| ports.first().map(|p| p.port))
-                    == Some(port),
+                Some(svc) => {
+                    svc.spec
+                        .and_then(|s| s.ports)
+                        .and_then(|ports| ports.first().map(|p| p.port))
+                        == Some(port)
+                }
                 None => false,
             }
         }
@@ -779,7 +780,9 @@ async fn deployment_has_label(w: &mut E2eWorld, name: String, key: String, value
     let api: Api<Deployment> = Api::namespaced(w.client().clone(), NS);
     let dep = api.get(&name).await.expect("Deployment");
     let labels = dep.metadata.labels.unwrap_or_default();
-    let got = labels.get(&key).unwrap_or_else(|| panic!("no label {key}, got {labels:?}"));
+    let got = labels
+        .get(&key)
+        .unwrap_or_else(|| panic!("no label {key}, got {labels:?}"));
     assert_eq!(got, &value);
 }
 
@@ -788,10 +791,7 @@ async fn deployment_has_annotation(w: &mut E2eWorld, name: String, key: String) 
     let api: Api<Deployment> = Api::namespaced(w.client().clone(), NS);
     let dep = api.get(&name).await.expect("Deployment");
     let ann = dep.metadata.annotations.unwrap_or_default();
-    assert!(
-        ann.contains_key(&key),
-        "no annotation {key}, got {ann:?}"
-    );
+    assert!(ann.contains_key(&key), "no annotation {key}, got {ann:?}");
 }
 
 #[then(regex = r#"^the Deployment "([^"]+)" pods select on label "([^=]+)=([^"]+)"$"#)]
@@ -818,6 +818,183 @@ async fn secret_exists(w: &mut E2eWorld, name: String) {
         async move {
             let api: Api<Secret> = Api::namespaced(client, NS);
             api.get_opt(&n).await.unwrap().is_some()
+        }
+    })
+    .await;
+}
+
+// ----- Cluster -----
+
+fn pg_postgres_config() -> PostgresConfig {
+    PostgresConfig {
+        host: "pg.example.com".into(),
+        port: Some(5432),
+        database: "n8n".into(),
+        user: "n8n".into(),
+        password_secret: SecretKeyRef {
+            name: "pg-creds".into(),
+            key: "password".into(),
+        },
+        schema: None,
+        ssl: None,
+        pool_size: None,
+        connection_timeout_ms: None,
+    }
+}
+
+async fn apply_cluster(w: &mut E2eWorld, name: &str, spec: ClusterSpec) {
+    let api: Api<Cluster> = Api::namespaced(w.client().clone(), NS);
+    let c = Cluster::new(name, spec);
+    let ssa = PatchParams::apply("cucumber").force();
+    api.patch(name, &ssa, &Patch::Apply(&c))
+        .await
+        .expect("apply Cluster");
+}
+
+#[when(
+    regex = r#"^I apply a Cluster "([^"]+)" backed by Postgres "([^"]+)" and Redis "([^"]+)" with (\d+) workers and webhooks$"#
+)]
+async fn apply_cluster_full(
+    w: &mut E2eWorld,
+    name: String,
+    pg_host: String,
+    redis_host: String,
+    workers: i32,
+) {
+    let mut pg = pg_postgres_config();
+    pg.host = pg_host;
+    let spec = ClusterSpec {
+        image: "nginx:alpine".into(),
+        encryption_key: None,
+        database: DatabaseSpec {
+            type_: "postgresdb".into(),
+            sqlite: None,
+            postgres: Some(pg),
+            mysql: None,
+        },
+        redis: RedisConfig {
+            host: redis_host,
+            port: Some(6379),
+            db: Some(0),
+            password_secret: Some(SecretKeyRef {
+                name: "redis-creds".into(),
+                key: "password".into(),
+            }),
+            username_secret: None,
+            tls: None,
+            prefix: None,
+        },
+        main: MainConfig {
+            replicas: 1,
+            ..Default::default()
+        },
+        workers: WorkerConfig {
+            replicas: workers,
+            image: None,
+            concurrency: Some(5),
+        },
+        webhooks: Some(WebhookConfig {
+            replicas: 1,
+            image: None,
+            host: None,
+            service: None,
+            networking: None,
+        }),
+    };
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with sqlite database$"#)]
+async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
+    let spec = ClusterSpec {
+        image: "nginx:alpine".into(),
+        encryption_key: None,
+        database: DatabaseSpec {
+            type_: "sqlite".into(),
+            sqlite: Some(SqliteConfig {
+                pool_size: None,
+                vacuum_on_startup: None,
+                database: None,
+                persistence: None,
+            }),
+            postgres: None,
+            mysql: None,
+        },
+        redis: RedisConfig {
+            host: "redis.example.com".into(),
+            ..Default::default()
+        },
+        main: MainConfig::default(),
+        workers: WorkerConfig {
+            replicas: 1,
+            image: None,
+            concurrency: None,
+        },
+        webhooks: None,
+    };
+    apply_cluster(w, &name, spec).await;
+}
+
+#[given(regex = r#"^a Cluster "([^"]+)" exists with webhooks$"#)]
+async fn cluster_with_webhooks(w: &mut E2eWorld, name: String) {
+    apply_cluster_full(
+        w,
+        name.clone(),
+        "pg.example.com".into(),
+        "redis.example.com".into(),
+        1,
+    )
+    .await;
+    let client = w.client().clone();
+    let wh = format!("{name}-webhook");
+    let wh2 = wh.clone();
+    wait_until(60, &format!("Deployment/{wh2} to appear"), move || {
+        let client = client.clone();
+        let n = wh.clone();
+        async move {
+            let api: Api<Deployment> = Api::namespaced(client, NS);
+            api.get_opt(&n).await.unwrap().is_some()
+        }
+    })
+    .await;
+}
+
+#[when(regex = r#"^I update the Cluster "([^"]+)" to have no webhooks$"#)]
+async fn drop_cluster_webhooks(w: &mut E2eWorld, name: String) {
+    let api: Api<Cluster> = Api::namespaced(w.client().clone(), NS);
+    let current = api.get(&name).await.expect("Cluster");
+    let mut spec = current.spec.clone();
+    spec.webhooks = None;
+    let new = Cluster::new(&name, spec);
+    let ssa = PatchParams::apply("cucumber").force();
+    api.patch(&name, &ssa, &Patch::Apply(&new))
+        .await
+        .expect("update Cluster");
+}
+
+#[then(regex = r#"^the Cluster "([^"]+)" never reaches status.ready=true within (\d+) seconds$"#)]
+async fn cluster_never_ready(w: &mut E2eWorld, name: String, secs: u64) {
+    let api: Api<Cluster> = Api::namespaced(w.client().clone(), NS);
+    let deadline = Instant::now() + Duration::from_secs(secs);
+    while Instant::now() < deadline {
+        let c = api.get(&name).await.expect("Cluster");
+        if c.status.as_ref().map(|s| s.ready).unwrap_or(false) {
+            panic!("Cluster/{name} became ready, but spec is invalid");
+        }
+        sleep(Duration::from_millis(500)).await;
+    }
+}
+
+#[then(regex = r#"^the Deployment "([^"]+)" is gone within (\d+) seconds$"#)]
+async fn deployment_gone(w: &mut E2eWorld, name: String, secs: u64) {
+    let client = w.client().clone();
+    let n = name.clone();
+    wait_until(secs, &format!("Deployment/{name} gone"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        async move {
+            let api: Api<Deployment> = Api::namespaced(client, NS);
+            api.get_opt(&n).await.unwrap().is_none()
         }
     })
     .await;

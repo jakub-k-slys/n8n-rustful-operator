@@ -15,7 +15,7 @@ metadata:
   name: n8n-rustful-operator
 rules:
   - apiGroups: ["n8n.slys.dev"]
-    resources: ["singles", "singles/status", "singles/finalizers"]
+    resources: ["singles", "singles/status", "singles/finalizers", "clusters", "clusters/status", "clusters/finalizers"]
     verbs: ["get", "list", "watch", "patch", "update"]
   - apiGroups: ["apps"]
     resources: ["deployments"]

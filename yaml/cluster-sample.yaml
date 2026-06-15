@@ -1,0 +1,38 @@
+apiVersion: n8n.slys.dev/v1
+kind: Cluster
+metadata:
+  name: prod
+  namespace: default
+spec:
+  image: n8nio/n8n:1.70.0
+  encryptionKey:
+    secretRef: { name: prod-encryption, key: encryption_key }
+  database:
+    type: postgresdb
+    postgres:
+      host: pg.example.com
+      port: 5432
+      database: n8n
+      user: n8n
+      passwordSecret: { name: pg-creds, key: password }
+  redis:
+    host: redis.example.com
+    port: 6379
+    db: 0
+    passwordSecret: { name: redis-creds, key: password }
+    prefix: n8n-prod
+  main:
+    replicas: 1
+    host: n8n.example.com
+    networking:
+      ingress:
+        className: nginx
+        tlsSecretName: n8n-tls
+  workers:
+    replicas: 3
+    concurrency: 10
+  webhooks:
+    replicas: 2
+    host: webhooks.example.com
+    networking:
+      ingress: { className: nginx }
