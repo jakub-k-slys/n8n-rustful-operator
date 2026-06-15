@@ -1,15 +1,22 @@
 use crate::{
     Error, Result,
     labels::{common_annotations, common_labels},
+    reconciler::ctx::ApplyCtx,
     spec::HttpRouteConfig,
 };
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use kube::{
     Client,
-    api::{Api, DynamicObject, GroupVersionKind, Patch, PatchParams},
+    api::{Api, DynamicObject, GroupVersionKind, Patch},
     discovery::ApiResource,
 };
 use serde_json::json;
+
+pub struct RouteTarget<'a> {
+    pub name: &'a str,
+    pub image: &'a str,
+    pub host: &'a str,
+    pub cfg: &'a HttpRouteConfig,
+}
 
 fn http_route_api(client: Client, ns: &str) -> Api<DynamicObject> {
     let gvk = GroupVersionKind::gvk("gateway.networking.k8s.io", "v1", "HTTPRoute");
@@ -27,45 +34,33 @@ pub async fn delete_http_route(client: &Client, ns: &str, name: &str) -> Result<
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-pub async fn apply_http_route(
-    client: &Client,
-    ns: &str,
-    name: &str,
-    image: &str,
-    host: &str,
-    cfg: &HttpRouteConfig,
-    owner: &OwnerReference,
-    ps: &PatchParams,
-) -> Result<()> {
+pub async fn apply_http_route(target: &RouteTarget<'_>, ctx: &ApplyCtx<'_>) -> Result<()> {
     let mut parent = json!({
-        "name": cfg.gateway.name,
+        "name": target.cfg.gateway.name,
         "kind": "Gateway",
         "group": "gateway.networking.k8s.io",
     });
-    if let Some(gw_ns) = &cfg.gateway.namespace {
+    if let Some(gw_ns) = &target.cfg.gateway.namespace {
         parent["namespace"] = json!(gw_ns);
     }
     let body = json!({
         "apiVersion": "gateway.networking.k8s.io/v1",
         "kind": "HTTPRoute",
         "metadata": {
-            "name": name,
-            "labels": common_labels(name, image, "http-route"),
+            "name": target.name,
+            "labels": common_labels(target.name, target.image, "http-route"),
             "annotations": common_annotations(),
-            "ownerReferences": [owner],
+            "ownerReferences": [ctx.owner],
         },
         "spec": {
             "parentRefs": [parent],
-            "hostnames": [host],
-            "rules": [{
-                "backendRefs": [{ "name": name, "port": 5678 }]
-            }]
+            "hostnames": [target.host],
+            "rules": [{ "backendRefs": [{ "name": target.name, "port": 5678 }] }]
         }
     });
-    let api = http_route_api(client.clone(), ns);
+    let api = http_route_api(ctx.client.clone(), ctx.ns);
     let route: DynamicObject = serde_json::from_value(body).expect("static httproute schema is valid");
-    api.patch(name, ps, &Patch::Apply(&route))
+    api.patch(target.name, ctx.patch, &Patch::Apply(&route))
         .await
         .map_err(Error::KubeError)?;
     Ok(())

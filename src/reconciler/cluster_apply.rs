@@ -3,9 +3,14 @@ use crate::{
     builders::volumes::build_db_volumes,
     env::redis::build_cluster_common_env,
     reconciler::{
-        cluster_main::reconcile_main, cluster_status::patch_status,
-        cluster_webhook::reconcile_webhooks, cluster_worker::reconcile_workers,
-        encryption::resolve_encryption_secret, owner::cluster_owner, validate::validate_cluster,
+        cluster_main::reconcile_main,
+        cluster_status::patch_status,
+        cluster_webhook::reconcile_webhooks,
+        cluster_worker::reconcile_workers,
+        ctx::{ApplyCtx, Bundle},
+        encryption::resolve_encryption_secret,
+        owner::cluster_owner,
+        validate::validate_cluster,
     },
     spec::Cluster,
     state::Context,
@@ -26,10 +31,16 @@ pub async fn apply(c: &Cluster, ctx: Arc<Context>) -> Result<Action> {
     let oref = c.object_ref(&());
     let ns = c.namespace().unwrap();
     let name = c.name_any();
-    let ps = PatchParams::apply("n8n-rustful-operator").force();
+    let patch = PatchParams::apply("n8n-rustful-operator").force();
 
     validate_cluster(c)?;
     let owner = cluster_owner(c);
+    let actx = ApplyCtx {
+        client: &client,
+        ns: &ns,
+        owner: &owner,
+        patch: &patch,
+    };
     let key_secret = resolve_encryption_secret(
         c,
         &c.spec.image,
@@ -39,12 +50,16 @@ pub async fn apply(c: &Cluster, ctx: Arc<Context>) -> Result<Action> {
         &owner,
     )
     .await?;
-    let common_env = build_cluster_common_env(c, &key_secret);
-    let (common_vols, common_mounts) = build_db_volumes(&name, &c.spec.database);
+    let (volumes, mounts) = build_db_volumes(&name, &c.spec.database);
+    let bundle = Bundle {
+        env: build_cluster_common_env(c, &key_secret),
+        volumes,
+        mounts,
+    };
 
-    reconcile_main(c, &client, &ns, &name, &common_env, &common_vols, &common_mounts, &owner, &ps).await?;
-    reconcile_workers(c, &client, &ns, &name, &common_env, &common_vols, &common_mounts, &owner, &ps).await?;
-    reconcile_webhooks(c, &client, &ns, &name, &common_env, &common_vols, &common_mounts, &owner, &ps).await?;
+    reconcile_main(c, &name, &actx, &bundle).await?;
+    reconcile_workers(c, &name, &actx, &bundle).await?;
+    reconcile_webhooks(c, &name, &actx, &bundle).await?;
 
     ctx.recorder
         .publish(
@@ -59,7 +74,6 @@ pub async fn apply(c: &Cluster, ctx: Arc<Context>) -> Result<Action> {
         )
         .await
         .map_err(Error::KubeError)?;
-
-    patch_status(c, &client, &ns, &name, &key_secret.name, &ps).await?;
+    patch_status(c, &client, &ns, &name, &key_secret.name, &patch).await?;
     Ok(Action::requeue(Duration::from_secs(5 * 60)))
 }

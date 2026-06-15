@@ -1,66 +1,68 @@
 use crate::{
     Error, Result,
     builders::{
-        http_route::{apply_http_route, delete_http_route},
+        http_route::{RouteTarget, apply_http_route, delete_http_route},
         ingress::build_ingress,
     },
+    reconciler::ctx::ApplyCtx,
     spec::NetworkingSpec,
 };
-use k8s_openapi::{api::networking::v1::Ingress, apimachinery::pkg::apis::meta::v1::OwnerReference};
-use kube::{
-    Client,
-    api::{Api, Patch, PatchParams},
-};
+use k8s_openapi::api::networking::v1::Ingress;
+use kube::api::Patch;
 
-#[allow(clippy::too_many_arguments)]
-pub async fn reconcile_role_networking(
-    client: &Client,
-    ns: &str,
-    name: &str,
-    image: &str,
-    component: &str,
-    host: Option<&str>,
-    net: Option<&NetworkingSpec>,
-    owner: &OwnerReference,
-    ps: &PatchParams,
-) -> Result<()> {
-    if let Some(net) = net
+/// Identity of a single role's networking surface (main, webhook, single's workflow-engine).
+pub struct RoleNetworking<'a> {
+    pub name: &'a str,
+    pub image: &'a str,
+    pub component: &'a str,
+    pub host: Option<&'a str>,
+    pub net: Option<&'a NetworkingSpec>,
+}
+
+pub async fn reconcile_role_networking(role: &RoleNetworking<'_>, ctx: &ApplyCtx<'_>) -> Result<()> {
+    if let Some(net) = role.net
         && net.ingress.is_some()
         && net.http_route.is_some()
     {
         return Err(Error::ConflictingNetworking);
     }
-    let want_ingress = net.and_then(|n| n.ingress.as_ref());
-    let want_route = net.and_then(|n| n.http_route.as_ref());
-    let ingress_api: Api<Ingress> = Api::namespaced(client.clone(), ns);
-    if let Some(ing_cfg) = want_ingress {
-        let host = host.unwrap_or("");
-        let mut ingress = build_ingress(name, image, host, ing_cfg, owner);
-        if let Some(meta_labels) = ingress.metadata.labels.as_mut() {
-            meta_labels.insert(
+    apply_or_delete_ingress(role, ctx).await?;
+    apply_or_delete_route(role, ctx).await
+}
+
+async fn apply_or_delete_ingress(role: &RoleNetworking<'_>, ctx: &ApplyCtx<'_>) -> Result<()> {
+    let api: kube::Api<Ingress> = ctx.api();
+    let want = role.net.and_then(|n| n.ingress.as_ref());
+    if let Some(cfg) = want {
+        let mut ing = build_ingress(role.name, role.image, role.host.unwrap_or(""), cfg, ctx.owner);
+        if let Some(labels) = ing.metadata.labels.as_mut() {
+            labels.insert(
                 "app.kubernetes.io/component".to_string(),
-                format!("{component}-ingress"),
+                format!("{}-ingress", role.component),
             );
         }
-        ingress_api
-            .patch(name, ps, &Patch::Apply(&ingress))
+        api.patch(role.name, ctx.patch, &Patch::Apply(&ing))
             .await
             .map_err(Error::KubeError)?;
-    } else if ingress_api
-        .get_opt(name)
-        .await
-        .map_err(Error::KubeError)?
-        .is_some()
-    {
-        ingress_api
-            .delete(name, &Default::default())
+    } else if api.get_opt(role.name).await.map_err(Error::KubeError)?.is_some() {
+        api.delete(role.name, &Default::default())
             .await
             .map_err(Error::KubeError)?;
-    }
-    if let Some(rt_cfg) = want_route {
-        apply_http_route(client, ns, name, image, host.unwrap_or(""), rt_cfg, owner, ps).await?;
-    } else {
-        let _ = delete_http_route(client, ns, name).await;
     }
     Ok(())
+}
+
+async fn apply_or_delete_route(role: &RoleNetworking<'_>, ctx: &ApplyCtx<'_>) -> Result<()> {
+    if let Some(cfg) = role.net.and_then(|n| n.http_route.as_ref()) {
+        let target = RouteTarget {
+            name: role.name,
+            image: role.image,
+            host: role.host.unwrap_or(""),
+            cfg,
+        };
+        apply_http_route(&target, ctx).await
+    } else {
+        let _ = delete_http_route(ctx.client, ctx.ns, role.name).await;
+        Ok(())
+    }
 }
