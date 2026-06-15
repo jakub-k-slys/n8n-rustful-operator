@@ -123,6 +123,16 @@ Feature: n8n operator reconciles Single custom resources
     When I apply a Single "lb" with image "nginx:alpine" and service type "LoadBalancer"
     Then the Service "lb" has type "LoadBalancer"
 
+  Scenario: HTTPRoute is provisioned and parent-ref is set when configured
+    When I apply a Single "route" with httpRoute gateway "shared-gw" namespace "default" and host "route.example.com"
+    Then an HTTPRoute named "route" exists with host "route.example.com" within 60 seconds
+    And the HTTPRoute "route" has parent gateway "shared-gw" namespace "default"
+
+  Scenario: Dropping httpRoute from spec removes the HTTPRoute
+    Given a Single "rt-drop" exists with httpRoute gateway "shared-gw" and host "rt.example.com"
+    When I update the Single "rt-drop" to have no networking
+    Then the HTTPRoute "rt-drop" is gone within 60 seconds
+
   Scenario: Ingress with TLS attaches the named Secret
     When I apply a Single "tls" with ingress class "nginx" host "tls.example.com" and TLS secret "tls-cert"
     Then an Ingress named "tls" exists with host "tls.example.com" within 60 seconds

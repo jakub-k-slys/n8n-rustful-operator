@@ -59,6 +59,12 @@ Feature: n8n operator reconciles Cluster custom resources
     Then the Deployment "cmd-worker" runs command "n8n worker"
     And the Deployment "cmd-webhook" runs command "n8n webhook"
 
+  Scenario: Cluster main can be exposed via HTTPRoute
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "rt" with main httpRoute gateway "shared-gw" namespace "default" and host "rt.example.com"
+    Then an HTTPRoute named "rt-main" exists with host "rt.example.com" within 60 seconds
+
   Scenario: Cluster main can be exposed via Ingress
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"
     And a Secret "redis-creds" exists with key "password" set to "rs3cret"

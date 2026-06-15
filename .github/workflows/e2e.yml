@@ -71,7 +71,11 @@ jobs:
       - name: Side-load image into the kind cluster
         run: kind load docker-image "${{ env.IMAGE }}:${{ steps.tag.outputs.version }}" --name n8n-e2e
 
-      - name: Apply CRD to the cluster
+      - name: Install Gateway API CRDs (standard channel)
+        run: |
+          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
+
+      - name: Apply operator CRDs to the cluster
         run: kubectl apply -f yaml/crd.yaml
 
       - name: Install operator (pinned tag, imagePullPolicy=Never)

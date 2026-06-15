@@ -6,7 +6,8 @@ use k8s_openapi::api::{
 };
 use kube::{
     Client,
-    api::{Api, DeleteParams, ObjectMeta, Patch, PatchParams, ResourceExt},
+    api::{Api, DeleteParams, DynamicObject, GroupVersionKind, ObjectMeta, Patch, PatchParams, ResourceExt},
+    discovery::ApiResource,
 };
 use n8n_rustful_operator::{
     Cluster, ClusterSpec, DatabaseSpec, DatabaseSsl, EncryptionKeySpec, GatewayRef, HttpRouteConfig,
@@ -1346,6 +1347,156 @@ async fn cluster_gone(w: &mut E2eWorld, name: String, secs: u64) {
         let n = n.clone();
         async move {
             let api: Api<Cluster> = Api::namespaced(client, NS);
+            api.get_opt(&n).await.unwrap().is_none()
+        }
+    })
+    .await;
+}
+
+// ----- HTTPRoute (Gateway API) -----
+
+fn http_route_api(client: Client) -> Api<DynamicObject> {
+    let gvk = GroupVersionKind::gvk("gateway.networking.k8s.io", "v1", "HTTPRoute");
+    let ar = ApiResource::from_gvk(&gvk);
+    Api::namespaced_with(client, NS, &ar)
+}
+
+#[when(regex = r#"^I apply a Single "([^"]+)" with httpRoute gateway "([^"]+)" namespace "([^"]+)" and host "([^"]+)"$"#)]
+async fn apply_single_route(
+    w: &mut E2eWorld,
+    name: String,
+    gateway: String,
+    gateway_ns: String,
+    host: String,
+) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.host = Some(host);
+    spec.networking = Some(NetworkingSpec {
+        ingress: None,
+        http_route: Some(HttpRouteConfig {
+            gateway: GatewayRef {
+                name: gateway,
+                namespace: Some(gateway_ns),
+            },
+        }),
+    });
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[given(regex = r#"^a Single "([^"]+)" exists with httpRoute gateway "([^"]+)" and host "([^"]+)"$"#)]
+async fn single_with_route_exists(w: &mut E2eWorld, name: String, gateway: String, host: String) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.host = Some(host);
+    spec.networking = Some(NetworkingSpec {
+        ingress: None,
+        http_route: Some(HttpRouteConfig {
+            gateway: GatewayRef { name: gateway, namespace: Some("default".into()) },
+        }),
+    });
+    apply_with_spec(w, &name, spec).await;
+    let api = http_route_api(w.client().clone());
+    let n = name.clone();
+    wait_until(60, &format!("HTTPRoute/{name} to appear"), move || {
+        let api = api.clone();
+        let n = n.clone();
+        async move { api.get_opt(&n).await.unwrap().is_some() }
+    })
+    .await;
+}
+
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with main httpRoute gateway "([^"]+)" namespace "([^"]+)" and host "([^"]+)"$"#)]
+async fn apply_cluster_main_route(
+    w: &mut E2eWorld,
+    name: String,
+    gateway: String,
+    gateway_ns: String,
+    host: String,
+) {
+    let spec = ClusterSpec {
+        image: "nginx:alpine".into(),
+        encryption_key: None,
+        database: DatabaseSpec {
+            type_: "postgresdb".into(),
+            sqlite: None,
+            postgres: Some(pg_postgres_config()),
+            mysql: None,
+        },
+        redis: RedisConfig {
+            host: "redis.example.com".into(),
+            port: Some(6379),
+            password_secret: Some(SecretKeyRef {
+                name: "redis-creds".into(),
+                key: "password".into(),
+            }),
+            ..Default::default()
+        },
+        main: MainConfig {
+            replicas: 1,
+            host: Some(host),
+            networking: Some(NetworkingSpec {
+                ingress: None,
+                http_route: Some(HttpRouteConfig {
+                    gateway: GatewayRef { name: gateway, namespace: Some(gateway_ns) },
+                }),
+            }),
+            ..Default::default()
+        },
+        workers: WorkerConfig { replicas: 1, image: None, concurrency: None },
+        webhooks: None,
+    };
+    apply_cluster(w, &name, spec).await;
+}
+
+#[then(regex = r#"^an HTTPRoute named "([^"]+)" exists with host "([^"]+)" within (\d+) seconds$"#)]
+async fn httproute_exists(w: &mut E2eWorld, name: String, host: String, secs: u64) {
+    let client = w.client().clone();
+    let n = name.clone();
+    let h = host.clone();
+    wait_until(secs, &format!("HTTPRoute/{name} host={host}"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        let h = h.clone();
+        async move {
+            let api = http_route_api(client);
+            match api.get_opt(&n).await.unwrap() {
+                Some(rt) => rt
+                    .data
+                    .get("spec")
+                    .and_then(|s| s.get("hostnames"))
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().any(|v| v.as_str() == Some(&h)))
+                    .unwrap_or(false),
+                None => false,
+            }
+        }
+    })
+    .await;
+}
+
+#[then(regex = r#"^the HTTPRoute "([^"]+)" has parent gateway "([^"]+)" namespace "([^"]+)"$"#)]
+async fn httproute_parent(w: &mut E2eWorld, name: String, gateway: String, gw_ns: String) {
+    let api = http_route_api(w.client().clone());
+    let rt = api.get(&name).await.expect("HTTPRoute");
+    let parent = rt
+        .data
+        .get("spec")
+        .and_then(|s| s.get("parentRefs"))
+        .and_then(|v| v.as_array())
+        .and_then(|a| a.first())
+        .expect("no parentRefs");
+    assert_eq!(parent.get("name").and_then(|v| v.as_str()), Some(gateway.as_str()));
+    assert_eq!(parent.get("namespace").and_then(|v| v.as_str()), Some(gw_ns.as_str()));
+}
+
+#[then(regex = r#"^the HTTPRoute "([^"]+)" is gone within (\d+) seconds$"#)]
+async fn httproute_gone(w: &mut E2eWorld, name: String, secs: u64) {
+    let client = w.client().clone();
+    let n = name.clone();
+    wait_until(secs, &format!("HTTPRoute/{name} gone"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        async move {
+            let api = http_route_api(client);
             api.get_opt(&n).await.unwrap().is_none()
         }
     })
