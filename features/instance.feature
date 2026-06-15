@@ -103,6 +103,17 @@ Feature: n8n operator reconciles Instance custom resources
     And a Secret named "alpha-encryption-key" exists
     And a Secret named "beta-encryption-key" exists
 
+  Scenario: Child resources carry the recommended app.kubernetes.io labels
+    When I apply an Instance "labelled" with image "n8nio/n8n:1.70.0"
+    Then a Deployment named "labelled" exists in namespace "default" within 60 seconds
+    And the Deployment "labelled" has label "app.kubernetes.io/name=n8n"
+    And the Deployment "labelled" has label "app.kubernetes.io/instance=labelled"
+    And the Deployment "labelled" has label "app.kubernetes.io/managed-by=n8n-rustful-operator"
+    And the Deployment "labelled" has label "app.kubernetes.io/part-of=n8n"
+    And the Deployment "labelled" has label "app.kubernetes.io/component=workflow-engine"
+    And the Deployment "labelled" has label "app.kubernetes.io/version=1.70.0"
+    And the Deployment "labelled" has annotation "n8n.slys.dev/operator-version"
+
   Scenario: Deleting one Instance leaves the other untouched
     Given an Instance "stayer" exists
     And an Instance "leaver" exists

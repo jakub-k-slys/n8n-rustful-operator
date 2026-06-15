@@ -326,7 +326,7 @@ impl Instance {
         let instances: Api<Instance> = Api::namespaced(client.clone(), &ns);
         let pvcs: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), &ns);
 
-        if let Some(pvc) = build_data_pvc(&name, self.spec.database.as_ref(), &owner) {
+        if let Some(pvc) = build_data_pvc(&name, &self.spec.image, self.spec.database.as_ref(), &owner) {
             pvcs.patch(
                 pvc.metadata.name.as_deref().unwrap_or(&name),
                 &ps,
@@ -354,7 +354,7 @@ impl Instance {
         let ingress_api: Api<Ingress> = Api::namespaced(client.clone(), &ns);
         if let Some(ing_cfg) = want_ingress {
             let host = self.spec.host.as_deref().unwrap_or("");
-            let ingress = build_ingress(&name, host, ing_cfg, &owner);
+            let ingress = build_ingress(&name, &self.spec.image, host, ing_cfg, &owner);
             ingress_api
                 .patch(&name, &ps, &Patch::Apply(&ingress))
                 .await
@@ -373,7 +373,7 @@ impl Instance {
 
         if let Some(rt_cfg) = want_route {
             let host = self.spec.host.as_deref().unwrap_or("");
-            apply_http_route(&client, &ns, &name, host, rt_cfg, &owner, &ps).await?;
+            apply_http_route(&client, &ns, &name, &self.spec.image, host, rt_cfg, &owner, &ps).await?;
         } else {
             // Best-effort delete; ignore errors if the Gateway API CRD isn't installed.
             let _ = delete_http_route(&client, &ns, &name).await;
@@ -451,7 +451,8 @@ impl Instance {
                     name: Some(name.clone()),
                     namespace: Some(ns.to_string()),
                     owner_references: Some(vec![owner.clone()]),
-                    labels: Some(selector(&self.name_any())),
+                    labels: Some(common_labels(&self.name_any(), &self.spec.image, "encryption-key")),
+                    annotations: Some(common_annotations()),
                     ..Default::default()
                 },
                 string_data: Some(data),
@@ -485,13 +486,43 @@ impl Instance {
     }
 }
 
-fn selector(name: &str) -> BTreeMap<String, String> {
+/// Stable subset used as `Deployment.spec.selector` and `Service.spec.selector`.
+/// These two labels MUST NOT change — selectors are immutable after creation.
+fn selector_labels(name: &str) -> BTreeMap<String, String> {
     let mut m = BTreeMap::new();
     m.insert("app.kubernetes.io/name".to_string(), "n8n".to_string());
     m.insert("app.kubernetes.io/instance".to_string(), name.to_string());
+    m
+}
+
+/// Full label set put on `metadata.labels` of every managed object and on the
+/// pod template. Superset of `selector_labels` (so selectors still match) plus
+/// the four other recommended app.kubernetes.io labels.
+fn common_labels(name: &str, image: &str, component: &str) -> BTreeMap<String, String> {
+    let mut m = selector_labels(name);
     m.insert(
         "app.kubernetes.io/managed-by".to_string(),
         "n8n-rustful-operator".to_string(),
+    );
+    m.insert("app.kubernetes.io/part-of".to_string(), "n8n".to_string());
+    m.insert("app.kubernetes.io/component".to_string(), component.to_string());
+    m.insert("app.kubernetes.io/version".to_string(), image_version(image));
+    m
+}
+
+fn image_version(image: &str) -> String {
+    // Strip registry/host parts then take the tag after the last ':'.
+    let last = image.rsplit('/').next().unwrap_or(image);
+    last.rsplit_once(':')
+        .map(|(_, v)| v.to_string())
+        .unwrap_or_else(|| "latest".to_string())
+}
+
+fn common_annotations() -> BTreeMap<String, String> {
+    let mut m = BTreeMap::new();
+    m.insert(
+        "n8n.slys.dev/operator-version".to_string(),
+        env!("CARGO_PKG_VERSION").to_string(),
     );
     m
 }
@@ -502,7 +533,9 @@ fn build_deployment(
     key_secret: &SecretKeyRef,
     owner: &OwnerReference,
 ) -> Deployment {
-    let labels = selector(name);
+    let selector = selector_labels(name);
+    let labels = common_labels(name, &spec.image, "workflow-engine");
+    let annotations = common_annotations();
     let mut env = vec![json!({
         "name": "N8N_ENCRYPTION_KEY",
         "valueFrom": { "secretKeyRef": { "name": key_secret.name, "key": key_secret.key } }
@@ -523,13 +556,14 @@ fn build_deployment(
         "metadata": {
             "name": name,
             "labels": labels,
+            "annotations": annotations,
             "ownerReferences": [owner],
         },
         "spec": {
             "replicas": spec.replicas,
-            "selector": { "matchLabels": labels },
+            "selector": { "matchLabels": selector },
             "template": {
-                "metadata": { "labels": labels },
+                "metadata": { "labels": labels, "annotations": annotations },
                 "spec": {
                     "volumes": volumes,
                     "containers": [{
@@ -740,19 +774,22 @@ fn secret_volume(name: &str, secret_name: &str, secret_key: &str, file: &str) ->
 
 fn build_data_pvc(
     instance: &str,
+    image: &str,
     db: Option<&DatabaseSpec>,
     owner: &OwnerReference,
 ) -> Option<PersistentVolumeClaim> {
     let p = db
         .and_then(|d| d.sqlite.as_ref())
         .and_then(|s| s.persistence.as_ref())?;
-    let labels = selector(instance);
+    let labels = common_labels(instance, image, "data");
+    let annotations = common_annotations();
     let json = json!({
         "apiVersion": "v1",
         "kind": "PersistentVolumeClaim",
         "metadata": {
             "name": format!("{instance}-data"),
             "labels": labels,
+            "annotations": annotations,
             "ownerReferences": [owner],
         },
         "spec": {
@@ -765,7 +802,8 @@ fn build_data_pvc(
 }
 
 fn build_service(name: &str, spec: &InstanceSpec, owner: &OwnerReference) -> Service {
-    let labels = selector(name);
+    let selector = selector_labels(name);
+    let labels = common_labels(name, &spec.image, "workflow-engine");
     let svc_type = spec
         .service
         .as_ref()
@@ -774,12 +812,13 @@ fn build_service(name: &str, spec: &InstanceSpec, owner: &OwnerReference) -> Ser
     Service {
         metadata: ObjectMeta {
             name: Some(name.to_string()),
-            labels: Some(labels.clone()),
+            labels: Some(labels),
+            annotations: Some(common_annotations()),
             owner_references: Some(vec![owner.clone()]),
             ..Default::default()
         },
         spec: Some(k8s_openapi::api::core::v1::ServiceSpec {
-            selector: Some(labels),
+            selector: Some(selector),
             ports: Some(vec![ServicePort {
                 name: Some("http".to_string()),
                 port: 5678,
@@ -794,8 +833,15 @@ fn build_service(name: &str, spec: &InstanceSpec, owner: &OwnerReference) -> Ser
     }
 }
 
-fn build_ingress(name: &str, host: &str, cfg: &IngressConfig, owner: &OwnerReference) -> Ingress {
-    let labels = selector(name);
+fn build_ingress(
+    name: &str,
+    image: &str,
+    host: &str,
+    cfg: &IngressConfig,
+    owner: &OwnerReference,
+) -> Ingress {
+    let labels = common_labels(name, image, "ingress");
+    let annotations = common_annotations();
     let mut spec = json!({
         "ingressClassName": cfg.class_name,
         "rules": [{
@@ -820,6 +866,7 @@ fn build_ingress(name: &str, host: &str, cfg: &IngressConfig, owner: &OwnerRefer
         "metadata": {
             "name": name,
             "labels": labels,
+            "annotations": annotations,
             "ownerReferences": [owner],
         },
         "spec": spec,
@@ -839,16 +886,19 @@ async fn delete_http_route(client: &Client, ns: &str, name: &str) -> Result<()> 
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn apply_http_route(
     client: &Client,
     ns: &str,
     name: &str,
+    image: &str,
     host: &str,
     cfg: &HttpRouteConfig,
     owner: &OwnerReference,
     ps: &PatchParams,
 ) -> Result<()> {
-    let labels = selector(name);
+    let labels = common_labels(name, image, "http-route");
+    let annotations = common_annotations();
     let mut parent = json!({
         "name": cfg.gateway.name,
         "kind": "Gateway",
@@ -863,6 +913,7 @@ async fn apply_http_route(
         "metadata": {
             "name": name,
             "labels": labels,
+            "annotations": annotations,
             "ownerReferences": [owner],
         },
         "spec": {

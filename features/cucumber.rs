@@ -774,6 +774,26 @@ async fn deployment_mounts_secret(w: &mut E2eWorld, name: String, secret: String
     );
 }
 
+#[then(regex = r#"^the Deployment "([^"]+)" has label "([^=]+)=([^"]+)"$"#)]
+async fn deployment_has_label(w: &mut E2eWorld, name: String, key: String, value: String) {
+    let api: Api<Deployment> = Api::namespaced(w.client().clone(), NS);
+    let dep = api.get(&name).await.expect("Deployment");
+    let labels = dep.metadata.labels.unwrap_or_default();
+    let got = labels.get(&key).unwrap_or_else(|| panic!("no label {key}, got {labels:?}"));
+    assert_eq!(got, &value);
+}
+
+#[then(regex = r#"^the Deployment "([^"]+)" has annotation "([^"]+)"$"#)]
+async fn deployment_has_annotation(w: &mut E2eWorld, name: String, key: String) {
+    let api: Api<Deployment> = Api::namespaced(w.client().clone(), NS);
+    let dep = api.get(&name).await.expect("Deployment");
+    let ann = dep.metadata.annotations.unwrap_or_default();
+    assert!(
+        ann.contains_key(&key),
+        "no annotation {key}, got {ann:?}"
+    );
+}
+
 #[then(regex = r#"^the Deployment "([^"]+)" pods select on label "([^=]+)=([^"]+)"$"#)]
 async fn deployment_selects_label(w: &mut E2eWorld, name: String, key: String, value: String) {
     let api: Api<Deployment> = Api::namespaced(w.client().clone(), NS);
