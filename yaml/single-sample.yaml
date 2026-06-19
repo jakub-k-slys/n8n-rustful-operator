@@ -1,5 +1,5 @@
 apiVersion: n8n.slys.dev/v1
-kind: Instance
+kind: Single
 metadata:
   name: demo
   namespace: default
