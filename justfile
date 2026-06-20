@@ -25,7 +25,8 @@ fmt:
 test-unit:
   cargo test --lib --bins
 
-# compile for musl (for docker image)
+# compile for musl (for docker image) — local build stages the amd64 binary;
+# the multiarch (amd64 + arm64) image is built in CI by .github/workflows/docker.yml
 compile features="":
   #!/usr/bin/env bash
   docker run --rm \
@@ -34,12 +35,13 @@ compile features="":
     -w /volume \
     -t clux/muslrust:stable \
     cargo build --release --features={{features}} --bin n8n-rustful-operator
-  cp target/x86_64-unknown-linux-musl/release/n8n-rustful-operator .
+  mkdir -p dist/linux/amd64
+  cp target/x86_64-unknown-linux-musl/release/n8n-rustful-operator dist/linux/amd64/
 
 [private]
 _build features="":
   just compile {{features}}
-  docker build -t jslys/n8n-rustful-operator:local .
+  docker build --platform linux/amd64 -t jslys/n8n-rustful-operator:local .
 
 build-base: (_build "")
 build-otel: (_build "telemetry")
