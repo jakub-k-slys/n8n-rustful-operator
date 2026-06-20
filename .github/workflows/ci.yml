@@ -55,8 +55,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Compile crate
         run: cargo build --all-features --verbose
-      - name: Run cargo test
-        run: cargo test --all-features --verbose
+      - name: Run cargo test (unit only; cucumber BDD runs in e2e.yml)
+        run: cargo test --all-features --lib --bins --verbose
 
   crd_drift:
     name: CRD yaml drift check

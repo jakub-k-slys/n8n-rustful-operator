@@ -21,9 +21,9 @@ run:
 fmt:
   cargo +nightly fmt
 
-# run unit tests
+# run unit tests (the cucumber BDD suite needs a kind cluster — see e2e.yml)
 test-unit:
-  cargo test
+  cargo test --lib --bins
 
 # compile for musl (for docker image)
 compile features="":
