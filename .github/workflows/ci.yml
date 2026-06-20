@@ -1,6 +1,8 @@
 name: Pull request checks
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -74,6 +76,8 @@ jobs:
   semver_checks:
     name: Public API semver
     runs-on: ubuntu-latest
+    # Needs a PR base to diff against; skip on direct pushes to main.
+    if: github.event_name == 'pull_request'
     steps:
       - name: Check out source (full history)
         uses: actions/checkout@v6
