@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Install nightly toolchain with rustfmt
         uses: dtolnay/rust-toolchain@nightly
         with:
@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Install stable toolchain with clippy
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Restore cargo cache
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Restore cargo cache
@@ -80,7 +80,7 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
       - name: Check out source (full history)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Diff public API against PR base
@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Run cargo audit
         uses: rustsec/audit-check@v2.0.0
         with:
