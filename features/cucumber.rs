@@ -1622,10 +1622,7 @@ async fn hpa_min_max(w: &mut E2eWorld, name: String, min: i32, max: i32, secs: u
         async move {
             let api: Api<HorizontalPodAutoscaler> = Api::namespaced(client, NS);
             match api.get_opt(&n).await.unwrap() {
-                Some(h) => match h.spec {
-                    Some(s) => s.min_replicas == Some(min) && s.max_replicas == max,
-                    None => false,
-                },
+                Some(h) => h.spec.min_replicas == Some(min) && h.spec.max_replicas == max,
                 None => false,
             }
         }
@@ -1637,7 +1634,7 @@ async fn hpa_min_max(w: &mut E2eWorld, name: String, min: i32, max: i32, secs: u
 async fn hpa_target(w: &mut E2eWorld, name: String, target: String) {
     let api: Api<HorizontalPodAutoscaler> = Api::namespaced(w.client().clone(), NS);
     let hpa = api.get(&name).await.expect("HPA");
-    let r = hpa.spec.expect("hpa spec").scale_target_ref;
+    let r = hpa.spec.scale_target_ref;
     assert_eq!(r.kind, "Deployment");
     assert_eq!(r.name, target);
 }
