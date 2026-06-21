@@ -1992,7 +1992,7 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry_sdk",
  "prometheus-client",
- "rand 0.9.4",
+ "rand 0.10.1",
  "schemars",
  "serde",
  "serde_json",
