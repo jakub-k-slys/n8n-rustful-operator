@@ -4,12 +4,34 @@ use crate::{
     reconciler::ctx::ApplyCtx,
     spec::HttpRouteConfig,
 };
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::APIGroupList;
 use kube::{
     Client,
     api::{Api, DynamicObject, GroupVersionKind, Patch},
     discovery::ApiResource,
 };
 use serde_json::json;
+
+/// True if the cluster currently serves `gateway.networking.k8s.io/v1` (the
+/// group/version HTTPRoute lives in). Pure so it can be unit-tested without a
+/// cluster.
+pub fn gateway_v1_served(groups: &APIGroupList) -> bool {
+    groups
+        .groups
+        .iter()
+        .any(|g| g.name == "gateway.networking.k8s.io" && g.versions.iter().any(|v| v.version == "v1"))
+}
+
+/// Live check (one `/apis` call per invocation) for whether the Gateway API is
+/// installed. Re-evaluated on every reconcile, so installing or removing the
+/// Gateway API CRDs takes effect without restarting the operator. Treats a
+/// failed lookup as "not available".
+async fn gateway_api_available(client: &Client) -> bool {
+    match client.list_api_groups().await {
+        Ok(groups) => gateway_v1_served(&groups),
+        Err(_) => false,
+    }
+}
 
 pub struct RouteTarget<'a> {
     pub name: &'a str,
@@ -25,6 +47,13 @@ fn http_route_api(client: Client, ns: &str) -> Api<DynamicObject> {
 }
 
 pub async fn delete_http_route(client: &Client, ns: &str, name: &str) -> Result<()> {
+    // Best-effort GC of a role's HTTPRoute. When the Gateway API isn't served,
+    // no HTTPRoute can exist, and probing the unregistered group makes the
+    // apiserver return a plain-text 404 that kube-rs can't parse as a Status —
+    // spamming a WARN every reconcile. Skip the probe in that case.
+    if !gateway_api_available(client).await {
+        return Ok(());
+    }
     let api = http_route_api(client.clone(), ns);
     if let Ok(Some(_)) = api.get_opt(name).await {
         api.delete(name, &Default::default())
