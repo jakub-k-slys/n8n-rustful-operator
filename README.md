@@ -67,7 +67,7 @@ just generate     # write yaml/crd.yaml from the Rust types
 just install-crd  # generate + apply the CRDs
 just run          # run the operator against the current kube context
 just test-unit    # cargo test
-just fmt          # cargo +nightly fmt
+just fmt          # cargo fmt
 ```
 
 The operator exposes HTTP on `:8080`: `/` (diagnostics), `/health`, `/metrics`

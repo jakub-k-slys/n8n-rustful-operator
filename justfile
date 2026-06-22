@@ -17,9 +17,9 @@ run-telemetry:
 run:
   RUST_LOG=info,kube=debug,n8n_rustful_operator=debug cargo run
 
-# format with nightly rustfmt
+# format with stable rustfmt
 fmt:
-  cargo +nightly fmt
+  cargo fmt
 
 # run unit tests (the cucumber BDD suite needs a kind cluster — see e2e.yml)
 test-unit:
