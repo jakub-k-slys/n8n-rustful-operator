@@ -145,3 +145,15 @@ Feature: n8n operator reconciles Single custom resources
     Then the Single "leaver" is gone within 60 seconds
     And a Deployment named "stayer" exists in namespace "default" within 5 seconds
     And a Secret named "stayer-encryption-key" exists
+
+  Scenario: secureCookie sets N8N_SECURE_COOKIE on the Single
+    When I apply a Single "cookie" with secureCookie false
+    Then the Deployment "cookie" has env var "N8N_SECURE_COOKIE" set to "false"
+
+  Scenario: A Single without secureCookie carries no N8N_SECURE_COOKIE
+    When I apply a Single "no-cookie" with image "nginx:alpine"
+    Then the Deployment "no-cookie" has no env var "N8N_SECURE_COOKIE"
+
+  Scenario: extraEnv passes a variable straight to the Single container
+    When I apply a Single "extra" with extraEnv "N8N_PROXY_HOPS"="1"
+    Then the Deployment "extra" has env var "N8N_PROXY_HOPS" set to "1"

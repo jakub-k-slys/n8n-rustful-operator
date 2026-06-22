@@ -28,7 +28,7 @@ just install-crd      # generate + kubectl apply -f yaml/crd.yaml
 just run              # RUST_LOG=info,kube=debug,n8n_rustful_operator=debug cargo run
 just run-telemetry    # same, but with --features=telemetry and OPENTELEMETRY_ENDPOINT_URL
 just test-unit        # cargo test
-just fmt              # cargo +nightly fmt   (rustfmt.toml uses nightly-only options)
+just fmt              # cargo fmt
 just compile          # static musl build inside clux/muslrust:stable (for Dockerfile)
 just build-base       # compile + docker build -t jslys/n8n-rustful-operator:local .
 just build-otel       # same, with the telemetry feature
@@ -146,8 +146,8 @@ failure path.
   semver: `feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`, `build:`, `ci:`.
   Breaking changes use `feat!:` / `fix!:` or a `BREAKING CHANGE:` footer. The prefix drives
   the version bump (`feat` → minor, `fix` → patch, `!`/`BREAKING CHANGE` → major).
-- `rustfmt.toml` uses nightly-only options (`imports_granularity`, `overflow_delimited_expr`).
-  Always format with `cargo +nightly fmt` (or `just fmt`); plain `cargo fmt` will reject them.
+- `rustfmt.toml` is restricted to stable options. Format with `cargo fmt` (or `just fmt`)
+  on the stable toolchain — no nightly required.
 - All k8s writes from this operator use server-side apply with field manager
   `n8n-rustful-operator`. Keep that consistent — switching managers mid-flight will leave
   orphaned managed fields. Selector labels (`selector_labels`) are immutable; never change them.

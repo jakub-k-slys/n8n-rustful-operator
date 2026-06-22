@@ -24,6 +24,9 @@ pub enum Error {
 
     #[error("IllegalCluster: {0}")]
     IllegalCluster(String),
+
+    #[error("IllegalEnv: {0}")]
+    IllegalEnv(String),
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;

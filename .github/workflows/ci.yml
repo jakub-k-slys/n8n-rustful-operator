@@ -16,17 +16,17 @@ env:
 
 jobs:
   rustfmt:
-    name: Format (nightly rustfmt)
+    name: Format (rustfmt)
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
         uses: actions/checkout@v7
-      - name: Install nightly toolchain with rustfmt
-        uses: dtolnay/rust-toolchain@nightly
+      - name: Install stable toolchain with rustfmt
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
       - name: Verify formatting
-        run: cargo +nightly fmt --all -- --check
+        run: cargo fmt --all -- --check
 
   clippy:
     name: Lint (clippy)

@@ -235,6 +235,23 @@ spec:
                     - name
                     type: object
                 type: object
+              extraEnv:
+                description: Extra env passed straight to the n8n container.
+                items:
+                  description: |-
+                    A user-supplied environment variable passed straight through to the n8n
+                    container. Operator-managed variables (encryption key, `DB_*`,
+                    `QUEUE_BULL_*`, …) are rejected by validation so they can't be shadowed.
+                  properties:
+                    name:
+                      type: string
+                    value:
+                      type: string
+                  required:
+                  - name
+                  - value
+                  type: object
+                type: array
               host:
                 description: Externally-facing hostname. Required when `networking` is set.
                 nullable: true
@@ -297,6 +314,12 @@ spec:
                 default: 1
                 format: int32
                 type: integer
+              secureCookie:
+                description: |-
+                  Sets `N8N_SECURE_COOKIE`. Omit for the n8n default (true). An `extraEnv`
+                  entry of the same name overrides this.
+                nullable: true
+                type: boolean
               service:
                 nullable: true
                 properties:
@@ -567,6 +590,25 @@ spec:
                     - name
                     type: object
                 type: object
+              extraEnv:
+                description: |-
+                  Extra env applied to every role. A role's own `extraEnv` overrides an
+                  entry here with the same name.
+                items:
+                  description: |-
+                    A user-supplied environment variable passed straight through to the n8n
+                    container. Operator-managed variables (encryption key, `DB_*`,
+                    `QUEUE_BULL_*`, …) are rejected by validation so they can't be shadowed.
+                  properties:
+                    name:
+                      type: string
+                    value:
+                      type: string
+                  required:
+                  - name
+                  - value
+                  type: object
+                type: array
               image:
                 default: n8nio/n8n:latest
                 description: Cascading default image. Each role can override.
@@ -575,6 +617,23 @@ spec:
                 default:
                   replicas: 0
                 properties:
+                  extraEnv:
+                    description: Extra env for the main role; overrides `spec.extraEnv` by name.
+                    items:
+                      description: |-
+                        A user-supplied environment variable passed straight through to the n8n
+                        container. Operator-managed variables (encryption key, `DB_*`,
+                        `QUEUE_BULL_*`, …) are rejected by validation so they can't be shadowed.
+                      properties:
+                        name:
+                          type: string
+                        value:
+                          type: string
+                      required:
+                      - name
+                      - value
+                      type: object
+                    type: array
                   host:
                     nullable: true
                     type: string
@@ -693,9 +752,32 @@ spec:
                 required:
                 - host
                 type: object
+              secureCookie:
+                description: |-
+                  Sets `N8N_SECURE_COOKIE` on every role. Omit for the n8n default (true).
+                  An `extraEnv` entry of the same name overrides this.
+                nullable: true
+                type: boolean
               webhooks:
                 nullable: true
                 properties:
+                  extraEnv:
+                    description: Extra env for the webhook role; overrides `spec.extraEnv` by name.
+                    items:
+                      description: |-
+                        A user-supplied environment variable passed straight through to the n8n
+                        container. Operator-managed variables (encryption key, `DB_*`,
+                        `QUEUE_BULL_*`, …) are rejected by validation so they can't be shadowed.
+                      properties:
+                        name:
+                          type: string
+                        value:
+                          type: string
+                      required:
+                      - name
+                      - value
+                      type: object
+                    type: array
                   host:
                     nullable: true
                     type: string
@@ -776,6 +858,23 @@ spec:
                     minimum: 0.0
                     nullable: true
                     type: integer
+                  extraEnv:
+                    description: Extra env for the worker role; overrides `spec.extraEnv` by name.
+                    items:
+                      description: |-
+                        A user-supplied environment variable passed straight through to the n8n
+                        container. Operator-managed variables (encryption key, `DB_*`,
+                        `QUEUE_BULL_*`, …) are rejected by validation so they can't be shadowed.
+                      properties:
+                        name:
+                          type: string
+                        value:
+                          type: string
+                      required:
+                      - name
+                      - value
+                      type: object
+                    type: array
                   image:
                     nullable: true
                     type: string

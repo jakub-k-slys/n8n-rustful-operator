@@ -4,7 +4,7 @@ use crate::{
         cluster_deployment::{DeploymentInputs, build_cluster_deployment},
         hpa::build_worker_hpa,
     },
-    env::env_str,
+    env::{build_user_env, env_str},
     reconciler::ctx::{ApplyCtx, Bundle},
     spec::Cluster,
 };
@@ -29,6 +29,11 @@ pub async fn reconcile_workers(
         env.push(env_str("N8N_CONCURRENCY_PRODUCTION_LIMIT", cc.to_string()));
     }
     env.push(env_str("QUEUE_HEALTH_CHECK_ACTIVE", "true"));
+    env.extend(build_user_env(
+        c.spec.secure_cookie,
+        &c.spec.extra_env,
+        &c.spec.workers.extra_env,
+    ));
     let replicas = if c.spec.workers.autoscaling.is_some() {
         None
     } else {

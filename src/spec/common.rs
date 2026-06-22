@@ -13,6 +13,15 @@ fn default_secret_key() -> String {
     "encryption_key".to_string()
 }
 
+/// A user-supplied environment variable passed straight through to the n8n
+/// container. Operator-managed variables (encryption key, `DB_*`,
+/// `QUEUE_BULL_*`, …) are rejected by validation so they can't be shadowed.
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+pub struct EnvVar {
+    pub name: String,
+    pub value: String,
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
 pub struct EncryptionKeySpec {
     /// Reference to an existing Secret. Omit the whole block to auto-generate.

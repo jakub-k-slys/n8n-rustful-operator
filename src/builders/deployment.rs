@@ -1,6 +1,6 @@
 use crate::{
     builders::{pvc::build_persistence_volume, volumes::build_db_volumes},
-    env::database::build_db_env,
+    env::{build_user_env, database::build_db_env},
     labels::{common_annotations, common_labels, selector_labels},
     spec::{SecretKeyRef, SingleSpec},
 };
@@ -34,6 +34,7 @@ pub fn build_deployment(
         volumes.push(v);
         mounts.push(m);
     }
+    env.extend(build_user_env(spec.secure_cookie, &spec.extra_env, &[]));
 
     let dep_json = json!({
         "apiVersion": "apps/v1",

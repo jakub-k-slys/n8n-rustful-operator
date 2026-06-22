@@ -1,5 +1,5 @@
 use crate::spec::{
-    common::{EncryptionKeySpec, PersistenceConfig, ServiceConfig},
+    common::{EncryptionKeySpec, EnvVar, PersistenceConfig, ServiceConfig},
     database::DatabaseSpec,
     networking::NetworkingSpec,
 };
@@ -43,6 +43,13 @@ pub struct SingleSpec {
     /// PVC at `/home/node/.n8n` so binary data and the sqlite file persist.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub persistence: Option<PersistenceConfig>,
+    /// Sets `N8N_SECURE_COOKIE`. Omit for the n8n default (true). An `extraEnv`
+    /// entry of the same name overrides this.
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "secureCookie")]
+    pub secure_cookie: Option<bool>,
+    /// Extra env passed straight to the n8n container.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "extraEnv")]
+    pub extra_env: Vec<EnvVar>,
 }
 
 pub fn default_image() -> String {
