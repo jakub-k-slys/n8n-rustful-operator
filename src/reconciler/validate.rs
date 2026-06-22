@@ -1,7 +1,32 @@
 use crate::{
     Error, Result,
-    spec::{Cluster, DatabaseSpec},
+    spec::{Cluster, DatabaseSpec, EnvVar},
 };
+
+/// Env names (and prefixes) the operator wires itself; users may not shadow
+/// them via `extraEnv`.
+const RESERVED_ENV: &[&str] = &[
+    "N8N_ENCRYPTION_KEY",
+    "EXECUTIONS_MODE",
+    "N8N_CONCURRENCY_PRODUCTION_LIMIT",
+    "QUEUE_HEALTH_CHECK_ACTIVE",
+    "N8N_DISABLE_PRODUCTION_MAIN_PROCESS",
+];
+const RESERVED_PREFIXES: &[&str] = &["DB_", "QUEUE_BULL_"];
+
+pub fn validate_extra_env(env: &[EnvVar]) -> Result<()> {
+    for e in env {
+        let reserved = RESERVED_ENV.contains(&e.name.as_str())
+            || RESERVED_PREFIXES.iter().any(|p| e.name.starts_with(p));
+        if reserved {
+            return Err(Error::IllegalEnv(format!(
+                "extraEnv may not set operator-managed variable {:?}",
+                e.name
+            )));
+        }
+    }
+    Ok(())
+}
 
 pub fn validate_database(db: &DatabaseSpec) -> Result<()> {
     let illegal = |msg: &str| -> Result<()> { Err(Error::IllegalDatabase(msg.to_string())) };
@@ -54,6 +79,12 @@ pub fn validate_cluster(c: &Cluster) -> Result<()> {
         return Err(Error::IllegalCluster(
             "queue mode requires a shared DB; sqlite is not supported".into(),
         ));
+    }
+    validate_extra_env(&c.spec.extra_env)?;
+    validate_extra_env(&c.spec.main.extra_env)?;
+    validate_extra_env(&c.spec.workers.extra_env)?;
+    if let Some(wh) = &c.spec.webhooks {
+        validate_extra_env(&wh.extra_env)?;
     }
     Ok(())
 }

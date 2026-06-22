@@ -111,3 +111,17 @@ Feature: n8n operator reconciles Cluster custom resources
     Given a Cluster "wh-drop" exists with webhooks
     When I update the Cluster "wh-drop" to have no webhooks
     Then the Deployment "wh-drop-webhook" is gone within 60 seconds
+
+  Scenario: secureCookie sets N8N_SECURE_COOKIE on every role
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "cookie" with secureCookie false
+    Then the Deployment "cookie-main" has env var "N8N_SECURE_COOKIE" set to "false"
+    And the Deployment "cookie-worker" has env var "N8N_SECURE_COOKIE" set to "false"
+
+  Scenario: A role's extraEnv overrides the cluster-wide secureCookie
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "override" with secureCookie true and main extraEnv "N8N_SECURE_COOKIE"="false"
+    Then the Deployment "override-main" has env var "N8N_SECURE_COOKIE" set to "false"
+    And the Deployment "override-worker" has env var "N8N_SECURE_COOKIE" set to "true"

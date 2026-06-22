@@ -1,4 +1,8 @@
-use crate::{Error, Result, reconciler::validate::validate_database, spec::Single};
+use crate::{
+    Error, Result,
+    reconciler::validate::{validate_database, validate_extra_env},
+    spec::Single,
+};
 
 pub fn validate_single(s: &Single) -> Result<()> {
     if s.metadata.name.as_deref() == Some("illegal") {
@@ -13,5 +17,6 @@ pub fn validate_single(s: &Single) -> Result<()> {
     if let Some(db) = &s.spec.database {
         validate_database(db)?;
     }
+    validate_extra_env(&s.spec.extra_env)?;
     Ok(())
 }

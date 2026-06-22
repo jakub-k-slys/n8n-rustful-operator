@@ -1,5 +1,5 @@
 use crate::spec::{
-    common::EncryptionKeySpec,
+    common::{EncryptionKeySpec, EnvVar},
     database::DatabaseSpec,
     redis::RedisConfig,
     roles::{MainConfig, WebhookConfig, WorkerConfig},
@@ -36,6 +36,14 @@ pub struct ClusterSpec {
     pub workers: WorkerConfig,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub webhooks: Option<WebhookConfig>,
+    /// Sets `N8N_SECURE_COOKIE` on every role. Omit for the n8n default (true).
+    /// An `extraEnv` entry of the same name overrides this.
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "secureCookie")]
+    pub secure_cookie: Option<bool>,
+    /// Extra env applied to every role. A role's own `extraEnv` overrides an
+    /// entry here with the same name.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "extraEnv")]
+    pub extra_env: Vec<EnvVar>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug, JsonSchema)]

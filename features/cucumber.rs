@@ -44,6 +44,8 @@ impl E2eWorld {
 
 fn base_spec(image: &str) -> SingleSpec {
     SingleSpec {
+        secure_cookie: None,
+        extra_env: vec![],
         image: image.into(),
         replicas: 1,
         host: Some("e2e.example.com".into()),
@@ -197,6 +199,20 @@ async fn when_apply_byo_key(
             key: secret_key,
         }),
     });
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Single "([^"]+)" with secureCookie (true|false)$"#)]
+async fn when_apply_secure_cookie(w: &mut E2eWorld, name: String, value: bool) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.secure_cookie = Some(value);
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Single "([^"]+)" with extraEnv "([^"]+)"="([^"]+)"$"#)]
+async fn when_apply_extra_env(w: &mut E2eWorld, name: String, var: String, val: String) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.extra_env = vec![env_var(&var, &val)];
     apply_with_spec(w, &name, spec).await;
 }
 
@@ -836,6 +852,47 @@ fn pg_postgres_config() -> PostgresConfig {
     }
 }
 
+/// Minimal valid queue-mode Cluster (Postgres + Redis, one worker, no webhook).
+fn base_cluster_spec() -> ClusterSpec {
+    ClusterSpec {
+        secure_cookie: None,
+        extra_env: vec![],
+        image: "nginx:alpine".into(),
+        encryption_key: None,
+        database: DatabaseSpec {
+            type_: "postgresdb".into(),
+            sqlite: None,
+            postgres: Some(pg_postgres_config()),
+            mysql: None,
+        },
+        redis: RedisConfig {
+            host: "redis.example.com".into(),
+            port: Some(6379),
+            password_secret: Some(SecretKeyRef {
+                name: "redis-creds".into(),
+                key: "password".into(),
+            }),
+            ..Default::default()
+        },
+        main: MainConfig {
+            replicas: 1,
+            ..Default::default()
+        },
+        workers: WorkerConfig {
+            replicas: 1,
+            ..Default::default()
+        },
+        webhooks: None,
+    }
+}
+
+fn env_var(name: &str, value: &str) -> n8n_rustful_operator::EnvVar {
+    n8n_rustful_operator::EnvVar {
+        name: name.into(),
+        value: value.into(),
+    }
+}
+
 async fn apply_cluster(w: &mut E2eWorld, name: &str, spec: ClusterSpec) {
     let api: Api<Cluster> = Api::namespaced(w.client().clone(), NS);
     let c = Cluster::new(name, spec);
@@ -858,6 +915,8 @@ async fn apply_cluster_full(
     let mut pg = pg_postgres_config();
     pg.host = pg_host;
     let spec = ClusterSpec {
+        secure_cookie: None,
+        extra_env: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -879,16 +938,19 @@ async fn apply_cluster_full(
             prefix: None,
         },
         main: MainConfig {
+            extra_env: vec![],
             replicas: 1,
             ..Default::default()
         },
         workers: WorkerConfig {
+            extra_env: vec![],
             replicas: workers,
             image: None,
             concurrency: Some(5),
             autoscaling: None,
         },
         webhooks: Some(WebhookConfig {
+            extra_env: vec![],
             replicas: 1,
             image: None,
             host: None,
@@ -904,6 +966,8 @@ async fn apply_cluster_with_main_pv(w: &mut E2eWorld, name: String, size: String
     let mut pg = pg_postgres_config();
     pg.host = "pg.example.com".into();
     let spec = ClusterSpec {
+        secure_cookie: None,
+        extra_env: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -925,6 +989,7 @@ async fn apply_cluster_with_main_pv(w: &mut E2eWorld, name: String, size: String
             prefix: None,
         },
         main: MainConfig {
+            extra_env: vec![],
             replicas: 1,
             persistence: Some(PersistenceConfig {
                 size,
@@ -934,6 +999,7 @@ async fn apply_cluster_with_main_pv(w: &mut E2eWorld, name: String, size: String
             ..Default::default()
         },
         workers: WorkerConfig {
+            extra_env: vec![],
             replicas: 1,
             image: None,
             concurrency: None,
@@ -947,6 +1013,8 @@ async fn apply_cluster_with_main_pv(w: &mut E2eWorld, name: String, size: String
 #[when(regex = r#"^I apply a Cluster "([^"]+)" with sqlite database$"#)]
 async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
     let spec = ClusterSpec {
+        secure_cookie: None,
+        extra_env: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -965,6 +1033,7 @@ async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
         },
         main: MainConfig::default(),
         workers: WorkerConfig {
+            extra_env: vec![],
             replicas: 1,
             image: None,
             concurrency: None,
@@ -1100,6 +1169,8 @@ async fn ingress_tls(w: &mut E2eWorld, name: String, secret: String) {
 #[when(regex = r#"^I apply a Cluster "([^"]+)" with encryption key from secret "([^"]+)" key "([^"]+)"$"#)]
 async fn apply_cluster_byo_key(w: &mut E2eWorld, name: String, secret: String, key: String) {
     let spec = ClusterSpec {
+        secure_cookie: None,
+        extra_env: vec![],
         image: "nginx:alpine".into(),
         encryption_key: Some(EncryptionKeySpec {
             secret_ref: Some(SecretKeyRef { name: secret, key }),
@@ -1120,10 +1191,12 @@ async fn apply_cluster_byo_key(w: &mut E2eWorld, name: String, secret: String, k
             ..Default::default()
         },
         main: MainConfig {
+            extra_env: vec![],
             replicas: 1,
             ..Default::default()
         },
         workers: WorkerConfig {
+            extra_env: vec![],
             replicas: 1,
             image: None,
             concurrency: None,
@@ -1137,6 +1210,8 @@ async fn apply_cluster_byo_key(w: &mut E2eWorld, name: String, secret: String, k
 #[when(regex = r#"^I apply a Cluster "([^"]+)" with main ingress class "([^"]+)" and host "([^"]+)"$"#)]
 async fn apply_cluster_main_ingress(w: &mut E2eWorld, name: String, class: String, host: String) {
     let spec = ClusterSpec {
+        secure_cookie: None,
+        extra_env: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1155,6 +1230,7 @@ async fn apply_cluster_main_ingress(w: &mut E2eWorld, name: String, class: Strin
             ..Default::default()
         },
         main: MainConfig {
+            extra_env: vec![],
             replicas: 1,
             host: Some(host),
             networking: Some(NetworkingSpec {
@@ -1167,6 +1243,7 @@ async fn apply_cluster_main_ingress(w: &mut E2eWorld, name: String, class: Strin
             ..Default::default()
         },
         workers: WorkerConfig {
+            extra_env: vec![],
             replicas: 1,
             image: None,
             concurrency: None,
@@ -1185,6 +1262,8 @@ async fn apply_cluster_image_overrides(
     worker_image: String,
 ) {
     let spec = ClusterSpec {
+        secure_cookie: None,
+        extra_env: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1203,11 +1282,13 @@ async fn apply_cluster_image_overrides(
             ..Default::default()
         },
         main: MainConfig {
+            extra_env: vec![],
             replicas: 1,
             image: Some(main_image),
             ..Default::default()
         },
         workers: WorkerConfig {
+            extra_env: vec![],
             replicas: 1,
             image: Some(worker_image),
             concurrency: None,
@@ -1221,6 +1302,8 @@ async fn apply_cluster_image_overrides(
 #[when(regex = r#"^I apply a Cluster "([^"]+)" with Redis prefix "([^"]+)"$"#)]
 async fn apply_cluster_redis_prefix(w: &mut E2eWorld, name: String, prefix: String) {
     let spec = ClusterSpec {
+        secure_cookie: None,
+        extra_env: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1240,10 +1323,12 @@ async fn apply_cluster_redis_prefix(w: &mut E2eWorld, name: String, prefix: Stri
             ..Default::default()
         },
         main: MainConfig {
+            extra_env: vec![],
             replicas: 1,
             ..Default::default()
         },
         workers: WorkerConfig {
+            extra_env: vec![],
             replicas: 1,
             image: None,
             concurrency: None,
@@ -1251,6 +1336,29 @@ async fn apply_cluster_redis_prefix(w: &mut E2eWorld, name: String, prefix: Stri
         },
         webhooks: None,
     };
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with secureCookie (true|false)$"#)]
+async fn apply_cluster_secure_cookie(w: &mut E2eWorld, name: String, value: bool) {
+    let mut spec = base_cluster_spec();
+    spec.secure_cookie = Some(value);
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(
+    regex = r#"^I apply a Cluster "([^"]+)" with secureCookie (true|false) and main extraEnv "([^"]+)"="([^"]+)"$"#
+)]
+async fn apply_cluster_cookie_and_main_override(
+    w: &mut E2eWorld,
+    name: String,
+    value: bool,
+    var: String,
+    val: String,
+) {
+    let mut spec = base_cluster_spec();
+    spec.secure_cookie = Some(value);
+    spec.main.extra_env = vec![env_var(&var, &val)];
     apply_cluster(w, &name, spec).await;
 }
 
@@ -1435,6 +1543,8 @@ async fn apply_cluster_main_route(
     host: String,
 ) {
     let spec = ClusterSpec {
+        secure_cookie: None,
+        extra_env: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1453,6 +1563,7 @@ async fn apply_cluster_main_route(
             ..Default::default()
         },
         main: MainConfig {
+            extra_env: vec![],
             replicas: 1,
             host: Some(host),
             networking: Some(NetworkingSpec {
@@ -1467,6 +1578,7 @@ async fn apply_cluster_main_route(
             ..Default::default()
         },
         workers: WorkerConfig {
+            extra_env: vec![],
             replicas: 1,
             image: None,
             concurrency: None,
@@ -1544,6 +1656,8 @@ async fn httproute_gone(w: &mut E2eWorld, name: String, secs: u64) {
 #[when(regex = r#"^I apply a Cluster "([^"]+)" with worker autoscaling min (\d+) max (\d+)$"#)]
 async fn apply_cluster_hpa(w: &mut E2eWorld, name: String, min: i32, max: i32) {
     let spec = ClusterSpec {
+        secure_cookie: None,
+        extra_env: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1562,10 +1676,12 @@ async fn apply_cluster_hpa(w: &mut E2eWorld, name: String, min: i32, max: i32) {
             ..Default::default()
         },
         main: MainConfig {
+            extra_env: vec![],
             replicas: 1,
             ..Default::default()
         },
         workers: WorkerConfig {
+            extra_env: vec![],
             replicas: 1,
             image: None,
             concurrency: None,

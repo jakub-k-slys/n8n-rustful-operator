@@ -1,7 +1,7 @@
 pub mod database;
 pub mod redis;
 
-use crate::spec::SecretKeyRef;
+use crate::spec::{EnvVar, SecretKeyRef};
 use serde_json::{Value, json};
 
 pub fn env_str(name: &str, value: impl Into<Value>) -> Value {
@@ -16,4 +16,29 @@ pub fn env_secret(name: &str, sec: &SecretKeyRef) -> Value {
         "name": name,
         "valueFrom": { "secretKeyRef": { "name": sec.name, "key": sec.key } }
     })
+}
+
+/// Render the user-controlled env for a role into container-env JSON: the
+/// `secureCookie` sugar, the cluster-wide `extraEnv`, and the per-role
+/// `extraEnv`, layered low→high. Later layers win on a name clash, and the
+/// result is de-duplicated by name (so the container never gets two entries
+/// for the same variable). For a `Single`, pass an empty `role` slice.
+pub fn build_user_env(secure_cookie: Option<bool>, cluster: &[EnvVar], role: &[EnvVar]) -> Vec<Value> {
+    let cookie = secure_cookie.map(|v| EnvVar {
+        name: "N8N_SECURE_COOKIE".to_string(),
+        value: v.to_string(),
+    });
+    let layered = cookie.iter().chain(cluster).chain(role);
+    let mut order: Vec<&str> = Vec::new();
+    let mut latest: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+    for e in layered {
+        if !latest.contains_key(e.name.as_str()) {
+            order.push(&e.name);
+        }
+        latest.insert(&e.name, &e.value);
+    }
+    order
+        .into_iter()
+        .map(|name| json!({ "name": name, "value": latest[name] }))
+        .collect()
 }
