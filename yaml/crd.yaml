@@ -280,6 +280,11 @@ spec:
                 default: n8nio/n8n:latest
                 description: Container image to deploy (e.g. `n8nio/n8n:1.70.0`).
                 type: string
+              imagePullSecrets:
+                description: Names of Secrets used to pull the container image (private registries).
+                items:
+                  type: string
+                type: array
               networking:
                 nullable: true
                 properties:
@@ -653,6 +658,13 @@ spec:
                 default: n8nio/n8n:latest
                 description: Cascading default image. Each role can override.
                 type: string
+              imagePullSecrets:
+                description: |-
+                  Names of Secrets used to pull the container image (private registries).
+                  Applied to every role.
+                items:
+                  type: string
+                type: array
               main:
                 default:
                   replicas: 0

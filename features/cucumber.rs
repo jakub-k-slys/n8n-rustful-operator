@@ -46,6 +46,7 @@ fn base_spec(image: &str) -> SingleSpec {
     SingleSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: image.into(),
         replicas: 1,
         host: Some("e2e.example.com".into()),
@@ -857,6 +858,7 @@ fn base_cluster_spec() -> ClusterSpec {
     ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -918,6 +920,7 @@ async fn apply_cluster_full(
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -969,6 +972,7 @@ async fn apply_cluster_with_main_pv(w: &mut E2eWorld, name: String, size: String
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1016,6 +1020,7 @@ async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1172,6 +1177,7 @@ async fn apply_cluster_byo_key(w: &mut E2eWorld, name: String, secret: String, k
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: Some(EncryptionKeySpec {
             secret_ref: Some(SecretKeyRef { name: secret, key }),
@@ -1213,6 +1219,7 @@ async fn apply_cluster_main_ingress(w: &mut E2eWorld, name: String, class: Strin
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1265,6 +1272,7 @@ async fn apply_cluster_image_overrides(
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1305,6 +1313,7 @@ async fn apply_cluster_redis_prefix(w: &mut E2eWorld, name: String, prefix: Stri
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1546,6 +1555,7 @@ async fn apply_cluster_main_route(
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1659,6 +1669,7 @@ async fn apply_cluster_hpa(w: &mut E2eWorld, name: String, min: i32, max: i32) {
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {

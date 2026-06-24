@@ -1,5 +1,5 @@
 use crate::{
-    builders::{pvc::build_persistence_volume, volumes::build_db_volumes},
+    builders::{image_pull_secrets, pvc::build_persistence_volume, volumes::build_db_volumes},
     env::{build_user_env, database::build_db_env},
     labels::{common_annotations, common_labels, selector_labels},
     spec::{SecretKeyRef, SingleSpec},
@@ -36,6 +36,25 @@ pub fn build_deployment(
     }
     env.extend(build_user_env(spec.secure_cookie, &spec.extra_env, &[]));
 
+    let mut pod_spec = json!({
+        "volumes": volumes,
+        "containers": [{
+            "name": "n8n",
+            "image": spec.image,
+            "ports": [{ "containerPort": 5678, "name": "http" }],
+            "env": env,
+            "volumeMounts": mounts,
+            "readinessProbe": {
+                "httpGet": { "path": "/healthz", "port": "http" },
+                "initialDelaySeconds": 10,
+                "periodSeconds": 10
+            }
+        }]
+    });
+    if !spec.image_pull_secrets.is_empty() {
+        pod_spec["imagePullSecrets"] = json!(image_pull_secrets(&spec.image_pull_secrets));
+    }
+
     let dep_json = json!({
         "apiVersion": "apps/v1",
         "kind": "Deployment",
@@ -50,21 +69,7 @@ pub fn build_deployment(
             "selector": { "matchLabels": selector },
             "template": {
                 "metadata": { "labels": labels, "annotations": annotations },
-                "spec": {
-                    "volumes": volumes,
-                    "containers": [{
-                        "name": "n8n",
-                        "image": spec.image,
-                        "ports": [{ "containerPort": 5678, "name": "http" }],
-                        "env": env,
-                        "volumeMounts": mounts,
-                        "readinessProbe": {
-                            "httpGet": { "path": "/healthz", "port": "http" },
-                            "initialDelaySeconds": 10,
-                            "periodSeconds": 10
-                        }
-                    }]
-                }
+                "spec": pod_spec,
             }
         }
     });

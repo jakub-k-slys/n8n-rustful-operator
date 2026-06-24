@@ -49,6 +49,7 @@ pub async fn reconcile_workers(
             volumes: &bundle.volumes,
             mounts: &bundle.mounts,
             command: Some(vec!["n8n".to_string(), "worker".to_string()]),
+            image_pull_secrets: &c.spec.image_pull_secrets,
         },
         ctx.owner,
     );

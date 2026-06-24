@@ -47,6 +47,7 @@ pub async fn reconcile_webhooks(
             volumes: &bundle.volumes,
             mounts: &bundle.mounts,
             command: Some(vec!["n8n".to_string(), "webhook".to_string()]),
+            image_pull_secrets: &c.spec.image_pull_secrets,
         },
         ctx.owner,
     );

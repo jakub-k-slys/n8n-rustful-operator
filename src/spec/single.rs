@@ -50,6 +50,9 @@ pub struct SingleSpec {
     /// Extra env passed straight to the n8n container.
     #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "extraEnv")]
     pub extra_env: Vec<EnvVar>,
+    /// Names of Secrets used to pull the container image (private registries).
+    #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "imagePullSecrets")]
+    pub image_pull_secrets: Vec<String>,
 }
 
 pub fn default_image() -> String {
