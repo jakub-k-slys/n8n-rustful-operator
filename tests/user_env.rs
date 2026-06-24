@@ -29,21 +29,21 @@ fn ev_secret(name: &str, secret: &str, key: &str) -> EnvVar {
 #[test]
 fn secure_cookie_sugar_renders_env() {
     assert_eq!(
-        build_user_env(Some(false), &[], &[]),
+        build_user_env(&[], Some(false), &[], &[]),
         vec![json!({ "name": "N8N_SECURE_COOKIE", "value": "false" })]
     );
 }
 
 #[test]
 fn unset_secure_cookie_emits_nothing() {
-    assert!(build_user_env(None, &[], &[]).is_empty());
+    assert!(build_user_env(&[], None, &[], &[]).is_empty());
 }
 
 #[test]
 fn extra_env_overrides_secure_cookie_and_dedups() {
     // cluster extraEnv wins over the secureCookie sugar; no duplicate names.
     let cluster = [ev("N8N_SECURE_COOKIE", "true"), ev("N8N_PROXY_HOPS", "1")];
-    let out = build_user_env(Some(false), &cluster, &[]);
+    let out = build_user_env(&[], Some(false), &cluster, &[]);
     assert_eq!(
         out,
         vec![
@@ -58,7 +58,7 @@ fn role_extra_env_overrides_cluster() {
     let cluster = [ev("FOO", "cluster")];
     let role = [ev("FOO", "role")];
     assert_eq!(
-        build_user_env(None, &cluster, &role),
+        build_user_env(&[], None, &cluster, &role),
         vec![json!({ "name": "FOO", "value": "role" })]
     );
 }
@@ -67,7 +67,7 @@ fn role_extra_env_overrides_cluster() {
 fn value_from_renders_secret_key_ref() {
     let cluster = [ev_secret("ANTHROPIC_API_KEY", "n8n-secret", "ANTHROPIC_API_KEY")];
     assert_eq!(
-        build_user_env(None, &cluster, &[]),
+        build_user_env(&[], None, &cluster, &[]),
         vec![json!({
             "name": "ANTHROPIC_API_KEY",
             "valueFrom": { "secretKeyRef": { "name": "n8n-secret", "key": "ANTHROPIC_API_KEY" } }
@@ -81,10 +81,41 @@ fn role_value_from_overrides_cluster_value() {
     let cluster = [ev("TOKEN", "inline")];
     let role = [ev_secret("TOKEN", "s", "tok")];
     assert_eq!(
-        build_user_env(None, &cluster, &role),
+        build_user_env(&[], None, &cluster, &role),
         vec![json!({
             "name": "TOKEN",
             "valueFrom": { "secretKeyRef": { "name": "s", "key": "tok" } }
         })]
     );
+}
+
+#[test]
+fn host_env_derives_url_vars() {
+    use n8n_rustful_operator::env::host_env;
+    assert_eq!(
+        build_user_env(&host_env(Some("n8n.example.com"), "https"), None, &[], &[]),
+        vec![
+            json!({ "name": "N8N_HOST", "value": "n8n.example.com" }),
+            json!({ "name": "N8N_PROTOCOL", "value": "https" }),
+            json!({ "name": "WEBHOOK_URL", "value": "https://n8n.example.com/" }),
+            json!({ "name": "N8N_EDITOR_BASE_URL", "value": "https://n8n.example.com" }),
+        ]
+    );
+}
+
+#[test]
+fn extra_env_overrides_host_default() {
+    use n8n_rustful_operator::env::host_env;
+    let defaults = host_env(Some("auto.example.com"), "https");
+    let cluster = [ev("N8N_PROTOCOL", "http")];
+    let out = build_user_env(&defaults, None, &cluster, &[]);
+    // the explicit extraEnv value wins, and the var is not duplicated
+    assert!(out.contains(&json!({ "name": "N8N_PROTOCOL", "value": "http" })));
+    assert_eq!(out.iter().filter(|e| e["name"] == "N8N_PROTOCOL").count(), 1);
+}
+
+#[test]
+fn no_host_emits_no_url_vars() {
+    use n8n_rustful_operator::env::host_env;
+    assert!(build_user_env(&host_env(None, "https"), None, &[], &[]).is_empty());
 }

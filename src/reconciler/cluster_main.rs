@@ -4,7 +4,7 @@ use crate::{
         cluster_deployment::{DeploymentInputs, build_cluster_deployment},
         service::build_cluster_service,
     },
-    env::build_user_env,
+    env::{build_user_env, host_env, protocol_for},
     reconciler::{
         cluster_main_volumes::main_volumes,
         ctx::{ApplyCtx, Bundle},
@@ -25,7 +25,12 @@ pub async fn reconcile_main(
     let image = c.spec.main.image.clone().unwrap_or_else(|| c.spec.image.clone());
     let (vols, mounts) = main_volumes(c, &name, &image, ctx, bundle).await?;
     let mut env = bundle.env.clone();
+    let defaults = host_env(
+        c.spec.main.host.as_deref(),
+        protocol_for(c.spec.main.networking.as_ref()),
+    );
     env.extend(build_user_env(
+        &defaults,
         c.spec.secure_cookie,
         &c.spec.extra_env,
         &c.spec.main.extra_env,

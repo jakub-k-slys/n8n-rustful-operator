@@ -30,6 +30,7 @@ pub async fn reconcile_workers(
     }
     env.push(env_str("QUEUE_HEALTH_CHECK_ACTIVE", "true"));
     env.extend(build_user_env(
+        &[],
         c.spec.secure_cookie,
         &c.spec.extra_env,
         &c.spec.workers.extra_env,

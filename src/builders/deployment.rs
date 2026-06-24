@@ -1,6 +1,6 @@
 use crate::{
     builders::{image_pull_secrets, pvc::build_persistence_volume, volumes::build_db_volumes},
-    env::{build_user_env, database::build_db_env},
+    env::{build_user_env, database::build_db_env, host_env, protocol_for},
     labels::{common_annotations, common_labels, selector_labels},
     spec::{SecretKeyRef, SingleSpec},
 };
@@ -34,7 +34,13 @@ pub fn build_deployment(
         volumes.push(v);
         mounts.push(m);
     }
-    env.extend(build_user_env(spec.secure_cookie, &spec.extra_env, &[]));
+    let defaults = host_env(spec.host.as_deref(), protocol_for(spec.networking.as_ref()));
+    env.extend(build_user_env(
+        &defaults,
+        spec.secure_cookie,
+        &spec.extra_env,
+        &[],
+    ));
 
     let mut pod_spec = json!({
         "volumes": volumes,
