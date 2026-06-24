@@ -4,6 +4,7 @@ use crate::spec::{
     redis::RedisConfig,
     roles::{MainConfig, WebhookConfig, WorkerConfig},
     single::default_image,
+    storage::BinaryDataSpec,
 };
 use kube::CustomResource;
 use schemars::JsonSchema;
@@ -48,6 +49,10 @@ pub struct ClusterSpec {
     /// Applied to every role.
     #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "imagePullSecrets")]
     pub image_pull_secrets: Vec<String>,
+    /// Binary-data storage shared across roles. Omit for n8n's per-pod
+    /// filesystem default (which does not share data between main and workers).
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "binaryData")]
+    pub binary_data: Option<BinaryDataSpec>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug, JsonSchema)]

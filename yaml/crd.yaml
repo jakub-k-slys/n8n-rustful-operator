@@ -445,6 +445,58 @@ spec:
         properties:
           spec:
             properties:
+              binaryData:
+                description: |-
+                  Binary-data storage shared across roles. Omit for n8n's per-pod
+                  filesystem default (which does not share data between main and workers).
+                nullable: true
+                properties:
+                  mode:
+                    description: '`filesystem` (default) or `s3`. Maps to `N8N_DEFAULT_BINARY_DATA_MODE`.'
+                    type: string
+                  s3:
+                    description: External S3-compatible storage; required when `mode` is `s3`.
+                    nullable: true
+                    properties:
+                      accessKeySecret:
+                        properties:
+                          key:
+                            default: encryption_key
+                            description: Key within the Secret. Defaults to `encryption_key`.
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      accessSecretSecret:
+                        properties:
+                          key:
+                            default: encryption_key
+                            description: Key within the Secret. Defaults to `encryption_key`.
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      bucket:
+                        type: string
+                      bucketRegion:
+                        type: string
+                      host:
+                        description: Endpoint host, e.g. `s3.eu-central-1.amazonaws.com` or a MinIO address.
+                        type: string
+                    required:
+                    - accessKeySecret
+                    - accessSecretSecret
+                    - bucket
+                    - bucketRegion
+                    - host
+                    type: object
+                required:
+                - mode
+                type: object
               database:
                 description: Queue mode requires a shared DB; sqlite is rejected.
                 properties:

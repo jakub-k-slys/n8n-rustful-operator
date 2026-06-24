@@ -1,5 +1,6 @@
 pub mod database;
 pub mod redis;
+pub mod storage;
 
 use crate::spec::{EnvVar, NetworkingSpec, SecretKeyRef};
 use serde_json::{Value, json};

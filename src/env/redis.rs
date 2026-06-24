@@ -37,5 +37,8 @@ pub fn build_cluster_common_env(c: &Cluster, key_secret: &SecretKeyRef) -> Vec<V
     ];
     env.extend(build_db_env(&c.spec.database));
     env.extend(build_redis_env(&c.spec.redis));
+    if let Some(bd) = &c.spec.binary_data {
+        env.extend(crate::env::storage::build_binary_data_env(bd));
+    }
     env
 }

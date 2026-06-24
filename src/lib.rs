@@ -12,10 +12,10 @@ pub use error::{Error, Result};
 pub use metrics::Metrics;
 pub use reconciler::run;
 pub use spec::{
-    Autoscaling, CLUSTER_FINALIZER, Cluster, ClusterSpec, ClusterStatus, DatabaseSpec, DatabaseSsl,
-    EncryptionKeySpec, EnvVar, EnvVarSource, GatewayRef, HttpRouteConfig, IngressConfig, MainConfig,
-    MysqlConfig, NetworkingSpec, PersistenceConfig, PostgresConfig, RedisConfig, ResourceList,
-    ResourceRequirements, SINGLE_FINALIZER, SecretKeyRef, ServiceConfig, Single, SingleSpec, SingleStatus,
-    SqliteConfig, WebhookConfig, WorkerConfig,
+    Autoscaling, BinaryDataSpec, CLUSTER_FINALIZER, Cluster, ClusterSpec, ClusterStatus, DatabaseSpec,
+    DatabaseSsl, EncryptionKeySpec, EnvVar, EnvVarSource, GatewayRef, HttpRouteConfig, IngressConfig,
+    MainConfig, MysqlConfig, NetworkingSpec, PersistenceConfig, PostgresConfig, RedisConfig, ResourceList,
+    ResourceRequirements, S3Config, SINGLE_FINALIZER, SecretKeyRef, ServiceConfig, Single, SingleSpec,
+    SingleStatus, SqliteConfig, WebhookConfig, WorkerConfig,
 };
 pub use state::{Context, Diagnostics, State};

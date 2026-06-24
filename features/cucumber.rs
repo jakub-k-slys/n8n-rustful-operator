@@ -988,6 +988,7 @@ fn base_cluster_spec() -> ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1063,6 +1064,7 @@ async fn apply_cluster_full(
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1117,6 +1119,7 @@ async fn apply_cluster_with_main_pv(w: &mut E2eWorld, name: String, size: String
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1166,6 +1169,7 @@ async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1324,6 +1328,7 @@ async fn apply_cluster_byo_key(w: &mut E2eWorld, name: String, secret: String, k
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: Some(EncryptionKeySpec {
             secret_ref: Some(SecretKeyRef { name: secret, key }),
@@ -1367,6 +1372,7 @@ async fn apply_cluster_main_ingress(w: &mut E2eWorld, name: String, class: Strin
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1410,6 +1416,28 @@ async fn apply_cluster_main_ingress(w: &mut E2eWorld, name: String, class: Strin
     apply_cluster(w, &name, spec).await;
 }
 
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with s3 binary data bucket "([^"]+)"$"#)]
+async fn apply_cluster_s3(w: &mut E2eWorld, name: String, bucket: String) {
+    let mut spec = base_cluster_spec();
+    spec.binary_data = Some(n8n_rustful_operator::BinaryDataSpec {
+        mode: "s3".into(),
+        s3: Some(n8n_rustful_operator::S3Config {
+            host: "minio.local".into(),
+            bucket,
+            region: "us-east-1".into(),
+            access_key_secret: n8n_rustful_operator::SecretKeyRef {
+                name: "s3-creds".into(),
+                key: "access_key".into(),
+            },
+            access_secret_secret: n8n_rustful_operator::SecretKeyRef {
+                name: "s3-creds".into(),
+                key: "access_secret".into(),
+            },
+        }),
+    });
+    apply_cluster(w, &name, spec).await;
+}
+
 #[when(regex = r#"^I apply a Cluster "([^"]+)" with main image "([^"]+)" and worker image "([^"]+)"$"#)]
 async fn apply_cluster_image_overrides(
     w: &mut E2eWorld,
@@ -1421,6 +1449,7 @@ async fn apply_cluster_image_overrides(
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1463,6 +1492,7 @@ async fn apply_cluster_redis_prefix(w: &mut E2eWorld, name: String, prefix: Stri
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1738,6 +1768,7 @@ async fn apply_cluster_main_route(
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1872,6 +1903,7 @@ async fn apply_cluster_hpa(w: &mut E2eWorld, name: String, min: i32, max: i32) {
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
