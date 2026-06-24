@@ -217,6 +217,42 @@ async fn when_apply_extra_env(w: &mut E2eWorld, name: String, var: String, val: 
     apply_with_spec(w, &name, spec).await;
 }
 
+#[when(regex = r#"^I apply a Single "([^"]+)" with extraEnv "([^"]+)" from secret "([^"]+)" key "([^"]+)"$"#)]
+async fn when_apply_extra_env_secret(
+    w: &mut E2eWorld,
+    name: String,
+    var: String,
+    secret: String,
+    key: String,
+) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.extra_env = vec![env_var_secret(&var, &secret, &key)];
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Single "([^"]+)" with extraEnv "([^"]+)" set to both value and valueFrom$"#)]
+async fn when_apply_extra_env_both(w: &mut E2eWorld, name: String, var: String) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.extra_env = vec![n8n_rustful_operator::EnvVar {
+        name: var,
+        value: Some("inline".into()),
+        value_from: Some(n8n_rustful_operator::EnvVarSource {
+            secret_ref: n8n_rustful_operator::SecretKeyRef {
+                name: "s".into(),
+                key: "k".into(),
+            },
+        }),
+    }];
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Single "([^"]+)" with imagePullSecret "([^"]+)"$"#)]
+async fn when_apply_image_pull_secret(w: &mut E2eWorld, name: String, secret: String) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.image_pull_secrets = vec![secret];
+    apply_with_spec(w, &name, spec).await;
+}
+
 #[when(regex = r#"^I apply a Single "([^"]+)" with both ingress and httpRoute$"#)]
 async fn when_apply_both(w: &mut E2eWorld, name: String) {
     let mut spec = base_spec("nginx:alpine");
@@ -425,6 +461,34 @@ async fn deployment_env(w: &mut E2eWorld, deployment: String, var: String, secre
                 env.and_then(|e| e.value_from)
                     .and_then(|vf| vf.secret_key_ref)
                     .map(|r| r.name == s && r.key == k)
+                    .unwrap_or(false)
+            }
+        },
+    )
+    .await;
+}
+
+#[then(regex = r#"^the Deployment "([^"]+)" has imagePullSecret "([^"]+)"$"#)]
+async fn deployment_image_pull_secret(w: &mut E2eWorld, deployment: String, secret: String) {
+    let client = w.client().clone();
+    let d = deployment.clone();
+    let s = secret.clone();
+    wait_until(
+        60,
+        &format!("Deployment/{deployment} imagePullSecret {secret}"),
+        move || {
+            let client = client.clone();
+            let d = d.clone();
+            let s = s.clone();
+            async move {
+                let api: Api<Deployment> = Api::namespaced(client, NS);
+                let Some(dep) = api.get_opt(&d).await.unwrap() else {
+                    return false;
+                };
+                dep.spec
+                    .and_then(|sp| sp.template.spec)
+                    .and_then(|ps| ps.image_pull_secrets)
+                    .map(|ips| ips.iter().any(|r| r.name == s))
                     .unwrap_or(false)
             }
         },
@@ -893,6 +957,19 @@ fn env_var(name: &str, value: &str) -> n8n_rustful_operator::EnvVar {
         name: name.into(),
         value: Some(value.into()),
         value_from: None,
+    }
+}
+
+fn env_var_secret(name: &str, secret: &str, key: &str) -> n8n_rustful_operator::EnvVar {
+    n8n_rustful_operator::EnvVar {
+        name: name.into(),
+        value: None,
+        value_from: Some(n8n_rustful_operator::EnvVarSource {
+            secret_ref: n8n_rustful_operator::SecretKeyRef {
+                name: secret.into(),
+                key: key.into(),
+            },
+        }),
     }
 }
 
