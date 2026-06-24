@@ -52,6 +52,7 @@ pub async fn reconcile_workers(
             command: Some(vec!["n8n".to_string(), "worker".to_string()]),
             image_pull_secrets: &c.spec.image_pull_secrets,
             resources: c.spec.workers.resources.as_ref(),
+            pod: c.spec.workers.pod.as_ref(),
         },
         ctx.owner,
     );

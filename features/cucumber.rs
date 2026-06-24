@@ -48,6 +48,7 @@ fn base_spec(image: &str) -> SingleSpec {
         extra_env: vec![],
         image_pull_secrets: vec![],
         resources: None,
+        pod: None,
         image: image.into(),
         replicas: 1,
         host: Some("e2e.example.com".into()),
@@ -251,6 +252,19 @@ async fn when_apply_extra_env_both(w: &mut E2eWorld, name: String, var: String) 
 async fn when_apply_image_pull_secret(w: &mut E2eWorld, name: String, secret: String) {
     let mut spec = base_spec("nginx:alpine");
     spec.image_pull_secrets = vec![secret];
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[when(
+    regex = r#"^I apply a Single "([^"]+)" with serviceAccount "([^"]+)" and nodeSelector "([^"]+)"="([^"]+)"$"#
+)]
+async fn when_apply_pod_config(w: &mut E2eWorld, name: String, sa: String, sel_key: String, sel_val: String) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.pod = Some(n8n_rustful_operator::PodConfig {
+        service_account_name: Some(sa),
+        node_selector: Some([(sel_key, sel_val)].into()),
+        ..Default::default()
+    });
     apply_with_spec(w, &name, spec).await;
 }
 
@@ -509,6 +523,52 @@ async fn deployment_image_pull_secret(w: &mut E2eWorld, deployment: String, secr
                     .and_then(|ps| ps.image_pull_secrets)
                     .map(|ips| ips.iter().any(|r| r.name == s))
                     .unwrap_or(false)
+            }
+        },
+    )
+    .await;
+}
+
+#[then(
+    regex = r#"^the Deployment "([^"]+)" runs as serviceAccount "([^"]+)" with nodeSelector "([^"]+)"="([^"]+)"$"#
+)]
+async fn deployment_pod_config(
+    w: &mut E2eWorld,
+    deployment: String,
+    sa: String,
+    sel_key: String,
+    sel_val: String,
+) {
+    let client = w.client().clone();
+    let d = deployment.clone();
+    wait_until(
+        60,
+        &format!("Deployment/{deployment} pod sa={sa} nodeSelector={sel_key}={sel_val}"),
+        move || {
+            let client = client.clone();
+            let d = d.clone();
+            let sa = sa.clone();
+            let sel_key = sel_key.clone();
+            let sel_val = sel_val.clone();
+            async move {
+                let api: Api<Deployment> = Api::namespaced(client, NS);
+                let Some(ps) = api
+                    .get_opt(&d)
+                    .await
+                    .unwrap()
+                    .and_then(|dep| dep.spec)
+                    .and_then(|s| s.template.spec)
+                else {
+                    return false;
+                };
+                let sa_ok = ps.service_account_name.as_deref() == Some(sa.as_str());
+                let sel_ok = ps
+                    .node_selector
+                    .as_ref()
+                    .and_then(|m| m.get(&sel_key))
+                    .map(|v| v == &sel_val)
+                    .unwrap_or(false);
+                sa_ok && sel_ok
             }
         },
     )
@@ -1097,6 +1157,7 @@ async fn apply_cluster_full(
             concurrency: Some(5),
             autoscaling: None,
             resources: None,
+            pod: None,
         },
         webhooks: Some(WebhookConfig {
             extra_env: vec![],
@@ -1106,6 +1167,7 @@ async fn apply_cluster_full(
             service: None,
             networking: None,
             resources: None,
+            pod: None,
         }),
     };
     apply_cluster(w, &name, spec).await;
@@ -1157,6 +1219,7 @@ async fn apply_cluster_with_main_pv(w: &mut E2eWorld, name: String, size: String
             concurrency: None,
             autoscaling: None,
             resources: None,
+            pod: None,
         },
         webhooks: None,
     };
@@ -1194,6 +1257,7 @@ async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
             concurrency: None,
             autoscaling: None,
             resources: None,
+            pod: None,
         },
         webhooks: None,
     };
@@ -1360,6 +1424,7 @@ async fn apply_cluster_byo_key(w: &mut E2eWorld, name: String, secret: String, k
             concurrency: None,
             autoscaling: None,
             resources: None,
+            pod: None,
         },
         webhooks: None,
     };
@@ -1410,6 +1475,7 @@ async fn apply_cluster_main_ingress(w: &mut E2eWorld, name: String, class: Strin
             concurrency: None,
             autoscaling: None,
             resources: None,
+            pod: None,
         },
         webhooks: None,
     };
@@ -1480,6 +1546,7 @@ async fn apply_cluster_image_overrides(
             concurrency: None,
             autoscaling: None,
             resources: None,
+            pod: None,
         },
         webhooks: None,
     };
@@ -1523,6 +1590,7 @@ async fn apply_cluster_redis_prefix(w: &mut E2eWorld, name: String, prefix: Stri
             concurrency: None,
             autoscaling: None,
             resources: None,
+            pod: None,
         },
         webhooks: None,
     };
@@ -1810,6 +1878,7 @@ async fn apply_cluster_main_route(
             concurrency: None,
             autoscaling: None,
             resources: None,
+            pod: None,
         },
         webhooks: None,
     };
@@ -1937,6 +2006,7 @@ async fn apply_cluster_hpa(w: &mut E2eWorld, name: String, min: i32, max: i32) {
                 target_cpu_utilization_percentage: None,
             }),
             resources: None,
+            pod: None,
         },
         webhooks: None,
     };

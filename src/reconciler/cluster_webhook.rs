@@ -51,6 +51,7 @@ pub async fn reconcile_webhooks(
             command: Some(vec!["n8n".to_string(), "webhook".to_string()]),
             image_pull_secrets: &c.spec.image_pull_secrets,
             resources: wh.resources.as_ref(),
+            pod: wh.pod.as_ref(),
         },
         ctx.owner,
     );
