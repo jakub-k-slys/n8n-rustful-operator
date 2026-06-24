@@ -24,6 +24,12 @@ pub fn validate_extra_env(env: &[EnvVar]) -> Result<()> {
                 e.name
             )));
         }
+        if e.value.is_some() == e.value_from.is_some() {
+            return Err(Error::IllegalEnv(format!(
+                "extraEnv {:?} must set exactly one of value or valueFrom",
+                e.name
+            )));
+        }
     }
     Ok(())
 }

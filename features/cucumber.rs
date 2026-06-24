@@ -889,7 +889,8 @@ fn base_cluster_spec() -> ClusterSpec {
 fn env_var(name: &str, value: &str) -> n8n_rustful_operator::EnvVar {
     n8n_rustful_operator::EnvVar {
         name: name.into(),
-        value: value.into(),
+        value: Some(value.into()),
+        value_from: None,
     }
 }
 
