@@ -1,5 +1,8 @@
 use crate::{
-    builders::{image_pull_secrets, pvc::build_persistence_volume, resources, volumes::build_db_volumes},
+    builders::{
+        apply_pod_config, image_pull_secrets, pvc::build_persistence_volume, resources,
+        volumes::build_db_volumes,
+    },
     env::{build_user_env, database::build_db_env, host_env, protocol_for},
     labels::{common_annotations, common_labels, selector_labels},
     spec::{SecretKeyRef, SingleSpec},
@@ -62,7 +65,7 @@ pub fn build_deployment(
         pod_spec["imagePullSecrets"] = json!(image_pull_secrets(&spec.image_pull_secrets));
     }
 
-    let dep_json = json!({
+    let mut dep_json = json!({
         "apiVersion": "apps/v1",
         "kind": "Deployment",
         "metadata": {
@@ -80,5 +83,8 @@ pub fn build_deployment(
             }
         }
     });
+    if let Some(pc) = &spec.pod {
+        apply_pod_config(&mut dep_json["spec"]["template"], pc);
+    }
     serde_json::from_value(dep_json).expect("static deployment schema is valid")
 }

@@ -2,6 +2,7 @@ use crate::spec::{
     common::{EncryptionKeySpec, EnvVar, PersistenceConfig, ResourceRequirements, ServiceConfig},
     database::DatabaseSpec,
     networking::NetworkingSpec,
+    pod::PodConfig,
 };
 use kube::CustomResource;
 use schemars::JsonSchema;
@@ -56,6 +57,9 @@ pub struct SingleSpec {
     /// Container CPU/memory requests and limits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resources: Option<ResourceRequirements>,
+    /// Pod-level scheduling and metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pod: Option<PodConfig>,
 }
 
 pub fn default_image() -> String {

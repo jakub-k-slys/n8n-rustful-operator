@@ -1,6 +1,7 @@
 use crate::spec::{
     common::{EnvVar, PersistenceConfig, ResourceRequirements, ServiceConfig},
     networking::NetworkingSpec,
+    pod::PodConfig,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -26,6 +27,9 @@ pub struct MainConfig {
     /// Container CPU/memory requests and limits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resources: Option<ResourceRequirements>,
+    /// Pod-level scheduling and metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pod: Option<PodConfig>,
 }
 
 fn default_main_replicas() -> i32 {
@@ -50,6 +54,9 @@ pub struct WorkerConfig {
     /// Container CPU/memory requests and limits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resources: Option<ResourceRequirements>,
+    /// Pod-level scheduling and metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pod: Option<PodConfig>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
@@ -83,4 +90,7 @@ pub struct WebhookConfig {
     /// Container CPU/memory requests and limits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resources: Option<ResourceRequirements>,
+    /// Pod-level scheduling and metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pod: Option<PodConfig>,
 }

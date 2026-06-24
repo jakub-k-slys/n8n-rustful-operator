@@ -187,3 +187,7 @@ Feature: n8n operator reconciles Single custom resources
   Scenario: resources are applied to the Single container
     When I apply a Single "sized" with cpu request "200m" and memory limit "1Gi"
     Then the Deployment "sized" requests cpu "200m" and limits memory "1Gi"
+
+  Scenario: pod scheduling is applied to the Single Deployment
+    When I apply a Single "scheduled" with serviceAccount "n8n-sa" and nodeSelector "disktype"="ssd"
+    Then the Deployment "scheduled" runs as serviceAccount "n8n-sa" with nodeSelector "disktype"="ssd"

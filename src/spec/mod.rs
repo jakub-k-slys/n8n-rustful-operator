@@ -2,6 +2,7 @@ pub mod cluster;
 pub mod common;
 pub mod database;
 pub mod networking;
+pub mod pod;
 pub mod redis;
 pub mod roles;
 pub mod single;
@@ -14,6 +15,7 @@ pub use common::{
 };
 pub use database::{DatabaseSpec, DatabaseSsl, MysqlConfig, PostgresConfig, SqliteConfig};
 pub use networking::{GatewayRef, HttpRouteConfig, IngressConfig, NetworkingSpec};
+pub use pod::PodConfig;
 pub use redis::RedisConfig;
 pub use roles::{Autoscaling, MainConfig, WebhookConfig, WorkerConfig};
 pub use single::{SINGLE_FINALIZER, Single, SingleSpec, SingleStatus};

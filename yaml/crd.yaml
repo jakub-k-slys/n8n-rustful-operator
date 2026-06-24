@@ -347,6 +347,40 @@ spec:
                 required:
                 - size
                 type: object
+              pod:
+                description: Pod-level scheduling and metadata.
+                nullable: true
+                properties:
+                  affinity:
+                    description: Free-form pod affinity (k8s `Affinity`), passed through verbatim.
+                    x-kubernetes-preserve-unknown-fields: true
+                  nodeSelector:
+                    additionalProperties:
+                      type: string
+                    nullable: true
+                    type: object
+                  podAnnotations:
+                    additionalProperties:
+                      type: string
+                    description: Extra annotations merged onto the pod template metadata.
+                    nullable: true
+                    type: object
+                  podLabels:
+                    additionalProperties:
+                      type: string
+                    description: Extra labels merged onto the pod template metadata.
+                    nullable: true
+                    type: object
+                  serviceAccountName:
+                    description: |-
+                      ServiceAccount the pods run as (also where image-pull Secrets attached
+                      to the SA are honoured).
+                    nullable: true
+                    type: string
+                  tolerations:
+                    description: Free-form pod tolerations (k8s `[]Toleration`), passed through verbatim.
+                    x-kubernetes-preserve-unknown-fields: true
+                type: object
               replicas:
                 default: 1
                 format: int32
@@ -867,6 +901,40 @@ spec:
                     required:
                     - size
                     type: object
+                  pod:
+                    description: Pod-level scheduling and metadata.
+                    nullable: true
+                    properties:
+                      affinity:
+                        description: Free-form pod affinity (k8s `Affinity`), passed through verbatim.
+                        x-kubernetes-preserve-unknown-fields: true
+                      nodeSelector:
+                        additionalProperties:
+                          type: string
+                        nullable: true
+                        type: object
+                      podAnnotations:
+                        additionalProperties:
+                          type: string
+                        description: Extra annotations merged onto the pod template metadata.
+                        nullable: true
+                        type: object
+                      podLabels:
+                        additionalProperties:
+                          type: string
+                        description: Extra labels merged onto the pod template metadata.
+                        nullable: true
+                        type: object
+                      serviceAccountName:
+                        description: |-
+                          ServiceAccount the pods run as (also where image-pull Secrets attached
+                          to the SA are honoured).
+                        nullable: true
+                        type: string
+                      tolerations:
+                        description: Free-form pod tolerations (k8s `[]Toleration`), passed through verbatim.
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
                   replicas:
                     default: 1
                     format: int32
@@ -1056,6 +1124,40 @@ spec:
                             type: string
                         type: object
                     type: object
+                  pod:
+                    description: Pod-level scheduling and metadata.
+                    nullable: true
+                    properties:
+                      affinity:
+                        description: Free-form pod affinity (k8s `Affinity`), passed through verbatim.
+                        x-kubernetes-preserve-unknown-fields: true
+                      nodeSelector:
+                        additionalProperties:
+                          type: string
+                        nullable: true
+                        type: object
+                      podAnnotations:
+                        additionalProperties:
+                          type: string
+                        description: Extra annotations merged onto the pod template metadata.
+                        nullable: true
+                        type: object
+                      podLabels:
+                        additionalProperties:
+                          type: string
+                        description: Extra labels merged onto the pod template metadata.
+                        nullable: true
+                        type: object
+                      serviceAccountName:
+                        description: |-
+                          ServiceAccount the pods run as (also where image-pull Secrets attached
+                          to the SA are honoured).
+                        nullable: true
+                        type: string
+                      tolerations:
+                        description: Free-form pod tolerations (k8s `[]Toleration`), passed through verbatim.
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
                   replicas:
                     format: int32
                     type: integer
@@ -1165,6 +1267,40 @@ spec:
                   image:
                     nullable: true
                     type: string
+                  pod:
+                    description: Pod-level scheduling and metadata.
+                    nullable: true
+                    properties:
+                      affinity:
+                        description: Free-form pod affinity (k8s `Affinity`), passed through verbatim.
+                        x-kubernetes-preserve-unknown-fields: true
+                      nodeSelector:
+                        additionalProperties:
+                          type: string
+                        nullable: true
+                        type: object
+                      podAnnotations:
+                        additionalProperties:
+                          type: string
+                        description: Extra annotations merged onto the pod template metadata.
+                        nullable: true
+                        type: object
+                      podLabels:
+                        additionalProperties:
+                          type: string
+                        description: Extra labels merged onto the pod template metadata.
+                        nullable: true
+                        type: object
+                      serviceAccountName:
+                        description: |-
+                          ServiceAccount the pods run as (also where image-pull Secrets attached
+                          to the SA are honoured).
+                        nullable: true
+                        type: string
+                      tolerations:
+                        description: Free-form pod tolerations (k8s `[]Toleration`), passed through verbatim.
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
                   replicas:
                     description: Static replica count. Ignored when `autoscaling` is set.
                     format: int32
