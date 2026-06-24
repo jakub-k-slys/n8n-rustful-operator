@@ -85,6 +85,15 @@ Feature: n8n operator reconciles Cluster custom resources
     Then the Deployment "redis-env-main" sources env var "QUEUE_BULL_REDIS_PASSWORD" from secret "redis-creds" key "password"
     And the Deployment "redis-env-main" has env var "QUEUE_BULL_PREFIX" set to "n8n-prod"
 
+  Scenario: s3 binary-data mode is shared across every role
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "s3c" with s3 binary data bucket "n8n-bin"
+    Then the Deployment "s3c-main" has env var "N8N_DEFAULT_BINARY_DATA_MODE" set to "s3"
+    And the Deployment "s3c-main" has env var "N8N_EXTERNAL_STORAGE_S3_BUCKET_NAME" set to "n8n-bin"
+    And the Deployment "s3c-worker" has env var "N8N_DEFAULT_BINARY_DATA_MODE" set to "s3"
+    And the Deployment "s3c-worker" sources env var "N8N_EXTERNAL_STORAGE_S3_ACCESS_SECRET" from secret "s3-creds" key "access_secret"
+
   Scenario: Cluster status reports replica counts per role
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"
     And a Secret "redis-creds" exists with key "password" set to "rs3cret"

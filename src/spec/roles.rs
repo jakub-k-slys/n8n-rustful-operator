@@ -1,5 +1,5 @@
 use crate::spec::{
-    common::{EnvVar, PersistenceConfig, ServiceConfig},
+    common::{EnvVar, PersistenceConfig, ResourceRequirements, ServiceConfig},
     networking::NetworkingSpec,
 };
 use schemars::JsonSchema;
@@ -23,6 +23,9 @@ pub struct MainConfig {
     /// Extra env for the main role; overrides `spec.extraEnv` by name.
     #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "extraEnv")]
     pub extra_env: Vec<EnvVar>,
+    /// Container CPU/memory requests and limits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resources: Option<ResourceRequirements>,
 }
 
 fn default_main_replicas() -> i32 {
@@ -44,6 +47,9 @@ pub struct WorkerConfig {
     /// Extra env for the worker role; overrides `spec.extraEnv` by name.
     #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "extraEnv")]
     pub extra_env: Vec<EnvVar>,
+    /// Container CPU/memory requests and limits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resources: Option<ResourceRequirements>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
@@ -74,4 +80,7 @@ pub struct WebhookConfig {
     /// Extra env for the webhook role; overrides `spec.extraEnv` by name.
     #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "extraEnv")]
     pub extra_env: Vec<EnvVar>,
+    /// Container CPU/memory requests and limits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resources: Option<ResourceRequirements>,
 }

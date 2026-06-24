@@ -300,9 +300,21 @@ spec:
                           namespace:
                             nullable: true
                             type: string
+                          sectionName:
+                            description: |-
+                              Gateway listener (`sectionName`) to attach to. Omit to let the Gateway
+                              pick a compatible listener.
+                            nullable: true
+                            type: string
                         required:
                         - name
                         type: object
+                      httpsRedirectSectionName:
+                        description: |-
+                          When set, also provision a companion HTTPRoute attached to this Gateway
+                          listener (sectionName) that 301-redirects HTTP→HTTPS.
+                        nullable: true
+                        type: string
                     required:
                     - gateway
                     type: object
@@ -339,6 +351,35 @@ spec:
                 default: 1
                 format: int32
                 type: integer
+              resources:
+                description: Container CPU/memory requests and limits.
+                nullable: true
+                properties:
+                  limits:
+                    nullable: true
+                    properties:
+                      cpu:
+                        description: CPU quantity, e.g. `500m` or `1`.
+                        nullable: true
+                        type: string
+                      memory:
+                        description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                        nullable: true
+                        type: string
+                    type: object
+                  requests:
+                    nullable: true
+                    properties:
+                      cpu:
+                        description: CPU quantity, e.g. `500m` or `1`.
+                        nullable: true
+                        type: string
+                      memory:
+                        description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                        nullable: true
+                        type: string
+                    type: object
+                type: object
               secureCookie:
                 description: |-
                   Sets `N8N_SECURE_COOKIE`. Omit for the n8n default (true). An `extraEnv`
@@ -404,6 +445,58 @@ spec:
         properties:
           spec:
             properties:
+              binaryData:
+                description: |-
+                  Binary-data storage shared across roles. Omit for n8n's per-pod
+                  filesystem default (which does not share data between main and workers).
+                nullable: true
+                properties:
+                  mode:
+                    description: '`filesystem` (default) or `s3`. Maps to `N8N_DEFAULT_BINARY_DATA_MODE`.'
+                    type: string
+                  s3:
+                    description: External S3-compatible storage; required when `mode` is `s3`.
+                    nullable: true
+                    properties:
+                      accessKeySecret:
+                        properties:
+                          key:
+                            default: encryption_key
+                            description: Key within the Secret. Defaults to `encryption_key`.
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      accessSecretSecret:
+                        properties:
+                          key:
+                            default: encryption_key
+                            description: Key within the Secret. Defaults to `encryption_key`.
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      bucket:
+                        type: string
+                      bucketRegion:
+                        type: string
+                      host:
+                        description: Endpoint host, e.g. `s3.eu-central-1.amazonaws.com` or a MinIO address.
+                        type: string
+                    required:
+                    - accessKeySecret
+                    - accessSecretSecret
+                    - bucket
+                    - bucketRegion
+                    - host
+                    type: object
+                required:
+                - mode
+                type: object
               database:
                 description: Queue mode requires a shared DB; sqlite is rejected.
                 properties:
@@ -727,9 +820,21 @@ spec:
                               namespace:
                                 nullable: true
                                 type: string
+                              sectionName:
+                                description: |-
+                                  Gateway listener (`sectionName`) to attach to. Omit to let the Gateway
+                                  pick a compatible listener.
+                                nullable: true
+                                type: string
                             required:
                             - name
                             type: object
+                          httpsRedirectSectionName:
+                            description: |-
+                              When set, also provision a companion HTTPRoute attached to this Gateway
+                              listener (sectionName) that 301-redirects HTTP→HTTPS.
+                            nullable: true
+                            type: string
                         required:
                         - gateway
                         type: object
@@ -766,6 +871,35 @@ spec:
                     default: 1
                     format: int32
                     type: integer
+                  resources:
+                    description: Container CPU/memory requests and limits.
+                    nullable: true
+                    properties:
+                      limits:
+                        nullable: true
+                        properties:
+                          cpu:
+                            description: CPU quantity, e.g. `500m` or `1`.
+                            nullable: true
+                            type: string
+                          memory:
+                            description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                            nullable: true
+                            type: string
+                        type: object
+                      requests:
+                        nullable: true
+                        properties:
+                          cpu:
+                            description: CPU quantity, e.g. `500m` or `1`.
+                            nullable: true
+                            type: string
+                          memory:
+                            description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                            nullable: true
+                            type: string
+                        type: object
+                    type: object
                   service:
                     nullable: true
                     properties:
@@ -891,9 +1025,21 @@ spec:
                               namespace:
                                 nullable: true
                                 type: string
+                              sectionName:
+                                description: |-
+                                  Gateway listener (`sectionName`) to attach to. Omit to let the Gateway
+                                  pick a compatible listener.
+                                nullable: true
+                                type: string
                             required:
                             - name
                             type: object
+                          httpsRedirectSectionName:
+                            description: |-
+                              When set, also provision a companion HTTPRoute attached to this Gateway
+                              listener (sectionName) that 301-redirects HTTP→HTTPS.
+                            nullable: true
+                            type: string
                         required:
                         - gateway
                         type: object
@@ -913,6 +1059,35 @@ spec:
                   replicas:
                     format: int32
                     type: integer
+                  resources:
+                    description: Container CPU/memory requests and limits.
+                    nullable: true
+                    properties:
+                      limits:
+                        nullable: true
+                        properties:
+                          cpu:
+                            description: CPU quantity, e.g. `500m` or `1`.
+                            nullable: true
+                            type: string
+                          memory:
+                            description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                            nullable: true
+                            type: string
+                        type: object
+                      requests:
+                        nullable: true
+                        properties:
+                          cpu:
+                            description: CPU quantity, e.g. `500m` or `1`.
+                            nullable: true
+                            type: string
+                          memory:
+                            description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                            nullable: true
+                            type: string
+                        type: object
+                    type: object
                   service:
                     nullable: true
                     properties:
@@ -994,6 +1169,35 @@ spec:
                     description: Static replica count. Ignored when `autoscaling` is set.
                     format: int32
                     type: integer
+                  resources:
+                    description: Container CPU/memory requests and limits.
+                    nullable: true
+                    properties:
+                      limits:
+                        nullable: true
+                        properties:
+                          cpu:
+                            description: CPU quantity, e.g. `500m` or `1`.
+                            nullable: true
+                            type: string
+                          memory:
+                            description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                            nullable: true
+                            type: string
+                        type: object
+                      requests:
+                        nullable: true
+                        properties:
+                          cpu:
+                            description: CPU quantity, e.g. `500m` or `1`.
+                            nullable: true
+                            type: string
+                          memory:
+                            description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                            nullable: true
+                            type: string
+                        type: object
+                    type: object
                 required:
                 - replicas
                 type: object

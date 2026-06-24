@@ -47,6 +47,7 @@ fn base_spec(image: &str) -> SingleSpec {
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        resources: None,
         image: image.into(),
         replicas: 1,
         host: Some("e2e.example.com".into()),
@@ -253,6 +254,22 @@ async fn when_apply_image_pull_secret(w: &mut E2eWorld, name: String, secret: St
     apply_with_spec(w, &name, spec).await;
 }
 
+#[when(regex = r#"^I apply a Single "([^"]+)" with cpu request "([^"]+)" and memory limit "([^"]+)"$"#)]
+async fn when_apply_resources(w: &mut E2eWorld, name: String, cpu: String, mem: String) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.resources = Some(n8n_rustful_operator::ResourceRequirements {
+        requests: Some(n8n_rustful_operator::ResourceList {
+            cpu: Some(cpu),
+            memory: None,
+        }),
+        limits: Some(n8n_rustful_operator::ResourceList {
+            cpu: None,
+            memory: Some(mem),
+        }),
+    });
+    apply_with_spec(w, &name, spec).await;
+}
+
 #[when(regex = r#"^I apply a Single "([^"]+)" with both ingress and httpRoute$"#)]
 async fn when_apply_both(w: &mut E2eWorld, name: String) {
     let mut spec = base_spec("nginx:alpine");
@@ -265,7 +282,9 @@ async fn when_apply_both(w: &mut E2eWorld, name: String) {
             gateway: GatewayRef {
                 name: "gw".into(),
                 namespace: None,
+                section_name: None,
             },
+            https_redirect_section_name: None,
         }),
     });
     apply_with_spec(w, &name, spec).await;
@@ -490,6 +509,52 @@ async fn deployment_image_pull_secret(w: &mut E2eWorld, deployment: String, secr
                     .and_then(|ps| ps.image_pull_secrets)
                     .map(|ips| ips.iter().any(|r| r.name == s))
                     .unwrap_or(false)
+            }
+        },
+    )
+    .await;
+}
+
+#[then(regex = r#"^the Deployment "([^"]+)" requests cpu "([^"]+)" and limits memory "([^"]+)"$"#)]
+async fn deployment_resources(w: &mut E2eWorld, deployment: String, cpu: String, mem: String) {
+    let client = w.client().clone();
+    let d = deployment.clone();
+    let cpu = cpu.clone();
+    let mem = mem.clone();
+    wait_until(
+        60,
+        &format!("Deployment/{deployment} resources cpu={cpu} mem={mem}"),
+        move || {
+            let client = client.clone();
+            let d = d.clone();
+            let cpu = cpu.clone();
+            let mem = mem.clone();
+            async move {
+                let api: Api<Deployment> = Api::namespaced(client, NS);
+                let Some(dep) = api.get_opt(&d).await.unwrap() else {
+                    return false;
+                };
+                let Some(c) = dep
+                    .spec
+                    .and_then(|s| s.template.spec)
+                    .and_then(|ps| ps.containers.into_iter().next())
+                else {
+                    return false;
+                };
+                let Some(res) = c.resources else {
+                    return false;
+                };
+                let req_ok = res
+                    .requests
+                    .as_ref()
+                    .and_then(|m| m.get("cpu"))
+                    .is_some_and(|q| q.0 == cpu);
+                let lim_ok = res
+                    .limits
+                    .as_ref()
+                    .and_then(|m| m.get("memory"))
+                    .is_some_and(|q| q.0 == mem);
+                req_ok && lim_ok
             }
         },
     )
@@ -923,6 +988,7 @@ fn base_cluster_spec() -> ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -998,6 +1064,7 @@ async fn apply_cluster_full(
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1029,6 +1096,7 @@ async fn apply_cluster_full(
             image: None,
             concurrency: Some(5),
             autoscaling: None,
+            resources: None,
         },
         webhooks: Some(WebhookConfig {
             extra_env: vec![],
@@ -1037,6 +1105,7 @@ async fn apply_cluster_full(
             host: None,
             service: None,
             networking: None,
+            resources: None,
         }),
     };
     apply_cluster(w, &name, spec).await;
@@ -1050,6 +1119,7 @@ async fn apply_cluster_with_main_pv(w: &mut E2eWorld, name: String, size: String
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1086,6 +1156,7 @@ async fn apply_cluster_with_main_pv(w: &mut E2eWorld, name: String, size: String
             image: None,
             concurrency: None,
             autoscaling: None,
+            resources: None,
         },
         webhooks: None,
     };
@@ -1098,6 +1169,7 @@ async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1121,6 +1193,7 @@ async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
             image: None,
             concurrency: None,
             autoscaling: None,
+            resources: None,
         },
         webhooks: None,
     };
@@ -1255,6 +1328,7 @@ async fn apply_cluster_byo_key(w: &mut E2eWorld, name: String, secret: String, k
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: Some(EncryptionKeySpec {
             secret_ref: Some(SecretKeyRef { name: secret, key }),
@@ -1285,6 +1359,7 @@ async fn apply_cluster_byo_key(w: &mut E2eWorld, name: String, secret: String, k
             image: None,
             concurrency: None,
             autoscaling: None,
+            resources: None,
         },
         webhooks: None,
     };
@@ -1297,6 +1372,7 @@ async fn apply_cluster_main_ingress(w: &mut E2eWorld, name: String, class: Strin
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1333,9 +1409,32 @@ async fn apply_cluster_main_ingress(w: &mut E2eWorld, name: String, class: Strin
             image: None,
             concurrency: None,
             autoscaling: None,
+            resources: None,
         },
         webhooks: None,
     };
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with s3 binary data bucket "([^"]+)"$"#)]
+async fn apply_cluster_s3(w: &mut E2eWorld, name: String, bucket: String) {
+    let mut spec = base_cluster_spec();
+    spec.binary_data = Some(n8n_rustful_operator::BinaryDataSpec {
+        mode: "s3".into(),
+        s3: Some(n8n_rustful_operator::S3Config {
+            host: "minio.local".into(),
+            bucket,
+            region: "us-east-1".into(),
+            access_key_secret: n8n_rustful_operator::SecretKeyRef {
+                name: "s3-creds".into(),
+                key: "access_key".into(),
+            },
+            access_secret_secret: n8n_rustful_operator::SecretKeyRef {
+                name: "s3-creds".into(),
+                key: "access_secret".into(),
+            },
+        }),
+    });
     apply_cluster(w, &name, spec).await;
 }
 
@@ -1350,6 +1449,7 @@ async fn apply_cluster_image_overrides(
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1379,6 +1479,7 @@ async fn apply_cluster_image_overrides(
             image: Some(worker_image),
             concurrency: None,
             autoscaling: None,
+            resources: None,
         },
         webhooks: None,
     };
@@ -1391,6 +1492,7 @@ async fn apply_cluster_redis_prefix(w: &mut E2eWorld, name: String, prefix: Stri
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1420,6 +1522,7 @@ async fn apply_cluster_redis_prefix(w: &mut E2eWorld, name: String, prefix: Stri
             image: None,
             concurrency: None,
             autoscaling: None,
+            resources: None,
         },
         webhooks: None,
     };
@@ -1589,7 +1692,37 @@ async fn apply_single_route(
             gateway: GatewayRef {
                 name: gateway,
                 namespace: Some(gateway_ns),
+                section_name: None,
             },
+            https_redirect_section_name: None,
+        }),
+    });
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[when(
+    regex = r#"^I apply a Single "([^"]+)" with httpRoute gateway "([^"]+)" namespace "([^"]+)" section "([^"]+)" redirect "([^"]+)" and host "([^"]+)"$"#
+)]
+async fn apply_single_route_section(
+    w: &mut E2eWorld,
+    name: String,
+    gateway: String,
+    gateway_ns: String,
+    section: String,
+    redirect: String,
+    host: String,
+) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.host = Some(host);
+    spec.networking = Some(NetworkingSpec {
+        ingress: None,
+        http_route: Some(HttpRouteConfig {
+            gateway: GatewayRef {
+                name: gateway,
+                namespace: Some(gateway_ns),
+                section_name: Some(section),
+            },
+            https_redirect_section_name: Some(redirect),
         }),
     });
     apply_with_spec(w, &name, spec).await;
@@ -1605,7 +1738,9 @@ async fn single_with_route_exists(w: &mut E2eWorld, name: String, gateway: Strin
             gateway: GatewayRef {
                 name: gateway,
                 namespace: Some("default".into()),
+                section_name: None,
             },
+            https_redirect_section_name: None,
         }),
     });
     apply_with_spec(w, &name, spec).await;
@@ -1633,6 +1768,7 @@ async fn apply_cluster_main_route(
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1660,7 +1796,9 @@ async fn apply_cluster_main_route(
                     gateway: GatewayRef {
                         name: gateway,
                         namespace: Some(gateway_ns),
+                        section_name: None,
                     },
+                    https_redirect_section_name: None,
                 }),
             }),
             ..Default::default()
@@ -1671,6 +1809,7 @@ async fn apply_cluster_main_route(
             image: None,
             concurrency: None,
             autoscaling: None,
+            resources: None,
         },
         webhooks: None,
     };
@@ -1724,6 +1863,23 @@ async fn httproute_parent(w: &mut E2eWorld, name: String, gateway: String, gw_ns
     );
 }
 
+#[then(regex = r#"^the HTTPRoute "([^"]+)" has parent section "([^"]+)"$"#)]
+async fn httproute_parent_section(w: &mut E2eWorld, name: String, section: String) {
+    let api = http_route_api(w.client().clone());
+    let rt = api.get(&name).await.expect("HTTPRoute");
+    let parent = rt
+        .data
+        .get("spec")
+        .and_then(|s| s.get("parentRefs"))
+        .and_then(|v| v.as_array())
+        .and_then(|a| a.first())
+        .expect("no parentRefs");
+    assert_eq!(
+        parent.get("sectionName").and_then(|v| v.as_str()),
+        Some(section.as_str())
+    );
+}
+
 #[then(regex = r#"^the HTTPRoute "([^"]+)" is gone within (\d+) seconds$"#)]
 async fn httproute_gone(w: &mut E2eWorld, name: String, secs: u64) {
     let client = w.client().clone();
@@ -1747,6 +1903,7 @@ async fn apply_cluster_hpa(w: &mut E2eWorld, name: String, min: i32, max: i32) {
         secure_cookie: None,
         extra_env: vec![],
         image_pull_secrets: vec![],
+        binary_data: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1779,6 +1936,7 @@ async fn apply_cluster_hpa(w: &mut E2eWorld, name: String, min: i32, max: i32) {
                 max_replicas: max,
                 target_cpu_utilization_percentage: None,
             }),
+            resources: None,
         },
         webhooks: None,
     };

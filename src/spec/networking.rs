@@ -24,6 +24,14 @@ pub struct IngressConfig {
 pub struct HttpRouteConfig {
     /// Gateway to attach this HTTPRoute to (parentRefs[0]).
     pub gateway: GatewayRef,
+    /// When set, also provision a companion HTTPRoute attached to this Gateway
+    /// listener (sectionName) that 301-redirects HTTP→HTTPS.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "httpsRedirectSectionName"
+    )]
+    pub https_redirect_section_name: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
@@ -31,4 +39,8 @@ pub struct GatewayRef {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub namespace: Option<String>,
+    /// Gateway listener (`sectionName`) to attach to. Omit to let the Gateway
+    /// pick a compatible listener.
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "sectionName")]
+    pub section_name: Option<String>,
 }

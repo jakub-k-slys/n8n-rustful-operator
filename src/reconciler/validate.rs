@@ -92,5 +92,18 @@ pub fn validate_cluster(c: &Cluster) -> Result<()> {
     if let Some(wh) = &c.spec.webhooks {
         validate_extra_env(&wh.extra_env)?;
     }
+    if let Some(bd) = &c.spec.binary_data {
+        if !matches!(bd.mode.as_str(), "filesystem" | "s3") {
+            return Err(Error::IllegalCluster(format!(
+                "unknown binaryData.mode {:?} (want filesystem or s3)",
+                bd.mode
+            )));
+        }
+        if bd.mode == "s3" && bd.s3.is_none() {
+            return Err(Error::IllegalCluster(
+                "binaryData.mode=s3 requires .binaryData.s3".into(),
+            ));
+        }
+    }
     Ok(())
 }

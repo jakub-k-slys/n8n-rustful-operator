@@ -128,6 +128,13 @@ Feature: n8n operator reconciles Single custom resources
     Then an HTTPRoute named "route" exists with host "route.example.com" within 60 seconds
     And the HTTPRoute "route" has parent gateway "shared-gw" namespace "default"
 
+  Scenario: httpRoute pins a Gateway listener and adds an HTTP→HTTPS redirect
+    When I apply a Single "routed" with httpRoute gateway "gw" namespace "istio-system" section "https" redirect "http" and host "n8n.example.com"
+    Then an HTTPRoute named "routed" exists with host "n8n.example.com" within 60 seconds
+    And the HTTPRoute "routed" has parent section "https"
+    And an HTTPRoute named "routed-redirect" exists with host "n8n.example.com" within 60 seconds
+    And the HTTPRoute "routed-redirect" has parent section "http"
+
   Scenario: Dropping httpRoute from spec removes the HTTPRoute
     Given a Single "rt-drop" exists with httpRoute gateway "shared-gw" and host "rt.example.com"
     When I update the Single "rt-drop" to have no networking
@@ -169,3 +176,14 @@ Feature: n8n operator reconciles Single custom resources
   Scenario: imagePullSecrets are set on the Single Deployment
     When I apply a Single "private" with imagePullSecret "ghcr-secret"
     Then the Deployment "private" has imagePullSecret "ghcr-secret"
+
+  Scenario: host is wired into the n8n URL env vars
+    When I apply a Single "urls" with ingress class "nginx" and host "n8n.example.com"
+    Then the Deployment "urls" has env var "N8N_HOST" set to "n8n.example.com"
+    And the Deployment "urls" has env var "N8N_PROTOCOL" set to "http"
+    And the Deployment "urls" has env var "WEBHOOK_URL" set to "http://n8n.example.com/"
+    And the Deployment "urls" has env var "N8N_EDITOR_BASE_URL" set to "http://n8n.example.com"
+
+  Scenario: resources are applied to the Single container
+    When I apply a Single "sized" with cpu request "200m" and memory limit "1Gi"
+    Then the Deployment "sized" requests cpu "200m" and limits memory "1Gi"

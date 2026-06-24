@@ -5,7 +5,7 @@ use crate::{
         http_route::delete_http_route,
         service::build_cluster_service,
     },
-    env::{build_user_env, env_str},
+    env::{build_user_env, env_str, host_env, protocol_for},
     reconciler::{
         ctx::{ApplyCtx, Bundle},
         networking::{RoleNetworking, reconcile_role_networking},
@@ -32,7 +32,9 @@ pub async fn reconcile_webhooks(
     let image = wh.image.clone().unwrap_or_else(|| c.spec.image.clone());
     let mut env = bundle.env.clone();
     env.push(env_str("N8N_DISABLE_PRODUCTION_MAIN_PROCESS", "true"));
+    let defaults = host_env(wh.host.as_deref(), protocol_for(wh.networking.as_ref()));
     env.extend(build_user_env(
+        &defaults,
         c.spec.secure_cookie,
         &c.spec.extra_env,
         &wh.extra_env,
@@ -48,6 +50,7 @@ pub async fn reconcile_webhooks(
             mounts: &bundle.mounts,
             command: Some(vec!["n8n".to_string(), "webhook".to_string()]),
             image_pull_secrets: &c.spec.image_pull_secrets,
+            resources: wh.resources.as_ref(),
         },
         ctx.owner,
     );

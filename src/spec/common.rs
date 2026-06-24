@@ -54,6 +54,26 @@ pub fn default_service_type() -> String {
     "ClusterIP".to_string()
 }
 
+/// Container resource requirements. Mirrors the CPU/memory subset of the k8s
+/// `ResourceRequirements` (the only quantities n8n cares about).
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+pub struct ResourceRequirements {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limits: Option<ResourceList>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requests: Option<ResourceList>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+pub struct ResourceList {
+    /// CPU quantity, e.g. `500m` or `1`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu: Option<String>,
+    /// Memory quantity, e.g. `512Mi` or `1Gi`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory: Option<String>,
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
 pub struct PersistenceConfig {
     /// Storage request, e.g. `1Gi`.
