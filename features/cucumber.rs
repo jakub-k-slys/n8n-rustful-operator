@@ -46,6 +46,7 @@ fn base_spec(image: &str) -> SingleSpec {
     SingleSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: image.into(),
         replicas: 1,
         host: Some("e2e.example.com".into()),
@@ -213,6 +214,42 @@ async fn when_apply_secure_cookie(w: &mut E2eWorld, name: String, value: bool) {
 async fn when_apply_extra_env(w: &mut E2eWorld, name: String, var: String, val: String) {
     let mut spec = base_spec("nginx:alpine");
     spec.extra_env = vec![env_var(&var, &val)];
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Single "([^"]+)" with extraEnv "([^"]+)" from secret "([^"]+)" key "([^"]+)"$"#)]
+async fn when_apply_extra_env_secret(
+    w: &mut E2eWorld,
+    name: String,
+    var: String,
+    secret: String,
+    key: String,
+) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.extra_env = vec![env_var_secret(&var, &secret, &key)];
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Single "([^"]+)" with extraEnv "([^"]+)" set to both value and valueFrom$"#)]
+async fn when_apply_extra_env_both(w: &mut E2eWorld, name: String, var: String) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.extra_env = vec![n8n_rustful_operator::EnvVar {
+        name: var,
+        value: Some("inline".into()),
+        value_from: Some(n8n_rustful_operator::EnvVarSource {
+            secret_ref: n8n_rustful_operator::SecretKeyRef {
+                name: "s".into(),
+                key: "k".into(),
+            },
+        }),
+    }];
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Single "([^"]+)" with imagePullSecret "([^"]+)"$"#)]
+async fn when_apply_image_pull_secret(w: &mut E2eWorld, name: String, secret: String) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.image_pull_secrets = vec![secret];
     apply_with_spec(w, &name, spec).await;
 }
 
@@ -424,6 +461,34 @@ async fn deployment_env(w: &mut E2eWorld, deployment: String, var: String, secre
                 env.and_then(|e| e.value_from)
                     .and_then(|vf| vf.secret_key_ref)
                     .map(|r| r.name == s && r.key == k)
+                    .unwrap_or(false)
+            }
+        },
+    )
+    .await;
+}
+
+#[then(regex = r#"^the Deployment "([^"]+)" has imagePullSecret "([^"]+)"$"#)]
+async fn deployment_image_pull_secret(w: &mut E2eWorld, deployment: String, secret: String) {
+    let client = w.client().clone();
+    let d = deployment.clone();
+    let s = secret.clone();
+    wait_until(
+        60,
+        &format!("Deployment/{deployment} imagePullSecret {secret}"),
+        move || {
+            let client = client.clone();
+            let d = d.clone();
+            let s = s.clone();
+            async move {
+                let api: Api<Deployment> = Api::namespaced(client, NS);
+                let Some(dep) = api.get_opt(&d).await.unwrap() else {
+                    return false;
+                };
+                dep.spec
+                    .and_then(|sp| sp.template.spec)
+                    .and_then(|ps| ps.image_pull_secrets)
+                    .map(|ips| ips.iter().any(|r| r.name == s))
                     .unwrap_or(false)
             }
         },
@@ -857,6 +922,7 @@ fn base_cluster_spec() -> ClusterSpec {
     ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -889,7 +955,21 @@ fn base_cluster_spec() -> ClusterSpec {
 fn env_var(name: &str, value: &str) -> n8n_rustful_operator::EnvVar {
     n8n_rustful_operator::EnvVar {
         name: name.into(),
-        value: value.into(),
+        value: Some(value.into()),
+        value_from: None,
+    }
+}
+
+fn env_var_secret(name: &str, secret: &str, key: &str) -> n8n_rustful_operator::EnvVar {
+    n8n_rustful_operator::EnvVar {
+        name: name.into(),
+        value: None,
+        value_from: Some(n8n_rustful_operator::EnvVarSource {
+            secret_ref: n8n_rustful_operator::SecretKeyRef {
+                name: secret.into(),
+                key: key.into(),
+            },
+        }),
     }
 }
 
@@ -917,6 +997,7 @@ async fn apply_cluster_full(
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -968,6 +1049,7 @@ async fn apply_cluster_with_main_pv(w: &mut E2eWorld, name: String, size: String
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1015,6 +1097,7 @@ async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1171,6 +1254,7 @@ async fn apply_cluster_byo_key(w: &mut E2eWorld, name: String, secret: String, k
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: Some(EncryptionKeySpec {
             secret_ref: Some(SecretKeyRef { name: secret, key }),
@@ -1212,6 +1296,7 @@ async fn apply_cluster_main_ingress(w: &mut E2eWorld, name: String, class: Strin
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1264,6 +1349,7 @@ async fn apply_cluster_image_overrides(
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1304,6 +1390,7 @@ async fn apply_cluster_redis_prefix(w: &mut E2eWorld, name: String, prefix: Stri
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1545,6 +1632,7 @@ async fn apply_cluster_main_route(
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1658,6 +1746,7 @@ async fn apply_cluster_hpa(w: &mut E2eWorld, name: String, min: i32, max: i32) {
     let spec = ClusterSpec {
         secure_cookie: None,
         extra_env: vec![],
+        image_pull_secrets: vec![],
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {

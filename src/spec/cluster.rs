@@ -44,6 +44,10 @@ pub struct ClusterSpec {
     /// entry here with the same name.
     #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "extraEnv")]
     pub extra_env: Vec<EnvVar>,
+    /// Names of Secrets used to pull the container image (private registries).
+    /// Applied to every role.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "imagePullSecrets")]
+    pub image_pull_secrets: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug, JsonSchema)]

@@ -40,6 +40,7 @@ pub async fn reconcile_main(
             volumes: &vols,
             mounts: &mounts,
             command: None,
+            image_pull_secrets: &c.spec.image_pull_secrets,
         },
         ctx.owner,
     );

@@ -1,3 +1,4 @@
+use crate::builders::image_pull_secrets;
 use crate::labels::{common_annotations, common_labels, selector_labels};
 use k8s_openapi::{api::apps::v1::Deployment, apimachinery::pkg::apis::meta::v1::OwnerReference};
 use serde_json::{Value, json};
@@ -13,6 +14,8 @@ pub struct DeploymentInputs<'a> {
     pub volumes: &'a [Value],
     pub mounts: &'a [Value],
     pub command: Option<Vec<String>>,
+    /// Secret names for pulling the image from a private registry.
+    pub image_pull_secrets: &'a [String],
 }
 
 pub fn build_cluster_deployment(input: &DeploymentInputs<'_>, owner: &OwnerReference) -> Deployment {
@@ -33,11 +36,15 @@ pub fn build_cluster_deployment(input: &DeploymentInputs<'_>, owner: &OwnerRefer
     if let Some(cmd) = &input.command {
         container["command"] = json!(cmd);
     }
+    let mut pod_spec = json!({ "volumes": input.volumes, "containers": [container] });
+    if !input.image_pull_secrets.is_empty() {
+        pod_spec["imagePullSecrets"] = json!(image_pull_secrets(input.image_pull_secrets));
+    }
     let mut spec = json!({
         "selector": { "matchLabels": selector_labels(input.name) },
         "template": {
             "metadata": { "labels": labels, "annotations": annotations },
-            "spec": { "volumes": input.volumes, "containers": [container] }
+            "spec": pod_spec,
         }
     });
     if let Some(r) = input.replicas {

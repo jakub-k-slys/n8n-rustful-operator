@@ -240,16 +240,36 @@ spec:
                 items:
                   description: |-
                     A user-supplied environment variable passed straight through to the n8n
-                    container. Operator-managed variables (encryption key, `DB_*`,
+                    container. Set exactly one of `value` (inline literal) or `valueFrom`
+                    (pulled from a Secret). Operator-managed variables (encryption key, `DB_*`,
                     `QUEUE_BULL_*`, …) are rejected by validation so they can't be shadowed.
                   properties:
                     name:
                       type: string
                     value:
+                      description: Inline literal value. Mutually exclusive with `valueFrom`.
+                      nullable: true
                       type: string
+                    valueFrom:
+                      description: Pull the value from a Secret. Mutually exclusive with `value`.
+                      nullable: true
+                      properties:
+                        secretRef:
+                          properties:
+                            key:
+                              default: encryption_key
+                              description: Key within the Secret. Defaults to `encryption_key`.
+                              type: string
+                            name:
+                              type: string
+                          required:
+                          - name
+                          type: object
+                      required:
+                      - secretRef
+                      type: object
                   required:
                   - name
-                  - value
                   type: object
                 type: array
               host:
@@ -260,6 +280,11 @@ spec:
                 default: n8nio/n8n:latest
                 description: Container image to deploy (e.g. `n8nio/n8n:1.70.0`).
                 type: string
+              imagePullSecrets:
+                description: Names of Secrets used to pull the container image (private registries).
+                items:
+                  type: string
+                type: array
               networking:
                 nullable: true
                 properties:
@@ -597,22 +622,49 @@ spec:
                 items:
                   description: |-
                     A user-supplied environment variable passed straight through to the n8n
-                    container. Operator-managed variables (encryption key, `DB_*`,
+                    container. Set exactly one of `value` (inline literal) or `valueFrom`
+                    (pulled from a Secret). Operator-managed variables (encryption key, `DB_*`,
                     `QUEUE_BULL_*`, …) are rejected by validation so they can't be shadowed.
                   properties:
                     name:
                       type: string
                     value:
+                      description: Inline literal value. Mutually exclusive with `valueFrom`.
+                      nullable: true
                       type: string
+                    valueFrom:
+                      description: Pull the value from a Secret. Mutually exclusive with `value`.
+                      nullable: true
+                      properties:
+                        secretRef:
+                          properties:
+                            key:
+                              default: encryption_key
+                              description: Key within the Secret. Defaults to `encryption_key`.
+                              type: string
+                            name:
+                              type: string
+                          required:
+                          - name
+                          type: object
+                      required:
+                      - secretRef
+                      type: object
                   required:
                   - name
-                  - value
                   type: object
                 type: array
               image:
                 default: n8nio/n8n:latest
                 description: Cascading default image. Each role can override.
                 type: string
+              imagePullSecrets:
+                description: |-
+                  Names of Secrets used to pull the container image (private registries).
+                  Applied to every role.
+                items:
+                  type: string
+                type: array
               main:
                 default:
                   replicas: 0
@@ -622,16 +674,36 @@ spec:
                     items:
                       description: |-
                         A user-supplied environment variable passed straight through to the n8n
-                        container. Operator-managed variables (encryption key, `DB_*`,
+                        container. Set exactly one of `value` (inline literal) or `valueFrom`
+                        (pulled from a Secret). Operator-managed variables (encryption key, `DB_*`,
                         `QUEUE_BULL_*`, …) are rejected by validation so they can't be shadowed.
                       properties:
                         name:
                           type: string
                         value:
+                          description: Inline literal value. Mutually exclusive with `valueFrom`.
+                          nullable: true
                           type: string
+                        valueFrom:
+                          description: Pull the value from a Secret. Mutually exclusive with `value`.
+                          nullable: true
+                          properties:
+                            secretRef:
+                              properties:
+                                key:
+                                  default: encryption_key
+                                  description: Key within the Secret. Defaults to `encryption_key`.
+                                  type: string
+                                name:
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                          required:
+                          - secretRef
+                          type: object
                       required:
                       - name
-                      - value
                       type: object
                     type: array
                   host:
@@ -766,16 +838,36 @@ spec:
                     items:
                       description: |-
                         A user-supplied environment variable passed straight through to the n8n
-                        container. Operator-managed variables (encryption key, `DB_*`,
+                        container. Set exactly one of `value` (inline literal) or `valueFrom`
+                        (pulled from a Secret). Operator-managed variables (encryption key, `DB_*`,
                         `QUEUE_BULL_*`, …) are rejected by validation so they can't be shadowed.
                       properties:
                         name:
                           type: string
                         value:
+                          description: Inline literal value. Mutually exclusive with `valueFrom`.
+                          nullable: true
                           type: string
+                        valueFrom:
+                          description: Pull the value from a Secret. Mutually exclusive with `value`.
+                          nullable: true
+                          properties:
+                            secretRef:
+                              properties:
+                                key:
+                                  default: encryption_key
+                                  description: Key within the Secret. Defaults to `encryption_key`.
+                                  type: string
+                                name:
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                          required:
+                          - secretRef
+                          type: object
                       required:
                       - name
-                      - value
                       type: object
                     type: array
                   host:
@@ -863,16 +955,36 @@ spec:
                     items:
                       description: |-
                         A user-supplied environment variable passed straight through to the n8n
-                        container. Operator-managed variables (encryption key, `DB_*`,
+                        container. Set exactly one of `value` (inline literal) or `valueFrom`
+                        (pulled from a Secret). Operator-managed variables (encryption key, `DB_*`,
                         `QUEUE_BULL_*`, …) are rejected by validation so they can't be shadowed.
                       properties:
                         name:
                           type: string
                         value:
+                          description: Inline literal value. Mutually exclusive with `valueFrom`.
+                          nullable: true
                           type: string
+                        valueFrom:
+                          description: Pull the value from a Secret. Mutually exclusive with `value`.
+                          nullable: true
+                          properties:
+                            secretRef:
+                              properties:
+                                key:
+                                  default: encryption_key
+                                  description: Key within the Secret. Defaults to `encryption_key`.
+                                  type: string
+                                name:
+                                  type: string
+                              required:
+                              - name
+                              type: object
+                          required:
+                          - secretRef
+                          type: object
                       required:
                       - name
-                      - value
                       type: object
                     type: array
                   image:

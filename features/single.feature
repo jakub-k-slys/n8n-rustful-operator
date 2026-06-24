@@ -157,3 +157,15 @@ Feature: n8n operator reconciles Single custom resources
   Scenario: extraEnv passes a variable straight to the Single container
     When I apply a Single "extra" with extraEnv "N8N_PROXY_HOPS"="1"
     Then the Deployment "extra" has env var "N8N_PROXY_HOPS" set to "1"
+
+  Scenario: extraEnv can source a value from a Secret
+    When I apply a Single "envsec" with extraEnv "ANTHROPIC_API_KEY" from secret "n8n-secret" key "ANTHROPIC_API_KEY"
+    Then the Deployment "envsec" sources env var "ANTHROPIC_API_KEY" from secret "n8n-secret" key "ANTHROPIC_API_KEY"
+
+  Scenario: extraEnv with both value and valueFrom is rejected
+    When I apply a Single "envbad" with extraEnv "FOO" set to both value and valueFrom
+    Then the Single "envbad" never reaches status.ready=true within 20 seconds
+
+  Scenario: imagePullSecrets are set on the Single Deployment
+    When I apply a Single "private" with imagePullSecret "ghcr-secret"
+    Then the Deployment "private" has imagePullSecret "ghcr-secret"

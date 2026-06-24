@@ -14,12 +14,26 @@ fn default_secret_key() -> String {
 }
 
 /// A user-supplied environment variable passed straight through to the n8n
-/// container. Operator-managed variables (encryption key, `DB_*`,
+/// container. Set exactly one of `value` (inline literal) or `valueFrom`
+/// (pulled from a Secret). Operator-managed variables (encryption key, `DB_*`,
 /// `QUEUE_BULL_*`, …) are rejected by validation so they can't be shadowed.
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
 pub struct EnvVar {
     pub name: String,
-    pub value: String,
+    /// Inline literal value. Mutually exclusive with `valueFrom`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    /// Pull the value from a Secret. Mutually exclusive with `value`.
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "valueFrom")]
+    pub value_from: Option<EnvVarSource>,
+}
+
+/// Source for an `EnvVar` whose value is resolved at runtime. Mirrors the k8s
+/// `valueFrom.secretKeyRef`; only a Secret key is supported.
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+pub struct EnvVarSource {
+    #[serde(rename = "secretRef")]
+    pub secret_ref: SecretKeyRef,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]

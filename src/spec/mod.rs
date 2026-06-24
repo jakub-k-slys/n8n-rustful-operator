@@ -8,7 +8,8 @@ pub mod single;
 
 pub use cluster::{CLUSTER_FINALIZER, Cluster, ClusterSpec, ClusterStatus};
 pub use common::{
-    EncryptionKeySpec, EnvVar, PersistenceConfig, SecretKeyRef, ServiceConfig, default_service_type,
+    EncryptionKeySpec, EnvVar, EnvVarSource, PersistenceConfig, SecretKeyRef, ServiceConfig,
+    default_service_type,
 };
 pub use database::{DatabaseSpec, DatabaseSsl, MysqlConfig, PostgresConfig, SqliteConfig};
 pub use networking::{GatewayRef, HttpRouteConfig, IngressConfig, NetworkingSpec};
