@@ -128,6 +128,13 @@ Feature: n8n operator reconciles Single custom resources
     Then an HTTPRoute named "route" exists with host "route.example.com" within 60 seconds
     And the HTTPRoute "route" has parent gateway "shared-gw" namespace "default"
 
+  Scenario: httpRoute pins a Gateway listener and adds an HTTP→HTTPS redirect
+    When I apply a Single "routed" with httpRoute gateway "gw" namespace "istio-system" section "https" redirect "http" and host "n8n.example.com"
+    Then an HTTPRoute named "routed" exists with host "n8n.example.com" within 60 seconds
+    And the HTTPRoute "routed" has parent section "https"
+    And an HTTPRoute named "routed-redirect" exists with host "n8n.example.com" within 60 seconds
+    And the HTTPRoute "routed-redirect" has parent section "http"
+
   Scenario: Dropping httpRoute from spec removes the HTTPRoute
     Given a Single "rt-drop" exists with httpRoute gateway "shared-gw" and host "rt.example.com"
     When I update the Single "rt-drop" to have no networking

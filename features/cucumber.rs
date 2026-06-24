@@ -282,7 +282,9 @@ async fn when_apply_both(w: &mut E2eWorld, name: String) {
             gateway: GatewayRef {
                 name: "gw".into(),
                 namespace: None,
+                section_name: None,
             },
+            https_redirect_section_name: None,
         }),
     });
     apply_with_spec(w, &name, spec).await;
@@ -1660,7 +1662,37 @@ async fn apply_single_route(
             gateway: GatewayRef {
                 name: gateway,
                 namespace: Some(gateway_ns),
+                section_name: None,
             },
+            https_redirect_section_name: None,
+        }),
+    });
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[when(
+    regex = r#"^I apply a Single "([^"]+)" with httpRoute gateway "([^"]+)" namespace "([^"]+)" section "([^"]+)" redirect "([^"]+)" and host "([^"]+)"$"#
+)]
+async fn apply_single_route_section(
+    w: &mut E2eWorld,
+    name: String,
+    gateway: String,
+    gateway_ns: String,
+    section: String,
+    redirect: String,
+    host: String,
+) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.host = Some(host);
+    spec.networking = Some(NetworkingSpec {
+        ingress: None,
+        http_route: Some(HttpRouteConfig {
+            gateway: GatewayRef {
+                name: gateway,
+                namespace: Some(gateway_ns),
+                section_name: Some(section),
+            },
+            https_redirect_section_name: Some(redirect),
         }),
     });
     apply_with_spec(w, &name, spec).await;
@@ -1676,7 +1708,9 @@ async fn single_with_route_exists(w: &mut E2eWorld, name: String, gateway: Strin
             gateway: GatewayRef {
                 name: gateway,
                 namespace: Some("default".into()),
+                section_name: None,
             },
+            https_redirect_section_name: None,
         }),
     });
     apply_with_spec(w, &name, spec).await;
@@ -1731,7 +1765,9 @@ async fn apply_cluster_main_route(
                     gateway: GatewayRef {
                         name: gateway,
                         namespace: Some(gateway_ns),
+                        section_name: None,
                     },
+                    https_redirect_section_name: None,
                 }),
             }),
             ..Default::default()
@@ -1793,6 +1829,23 @@ async fn httproute_parent(w: &mut E2eWorld, name: String, gateway: String, gw_ns
     assert_eq!(
         parent.get("namespace").and_then(|v| v.as_str()),
         Some(gw_ns.as_str())
+    );
+}
+
+#[then(regex = r#"^the HTTPRoute "([^"]+)" has parent section "([^"]+)"$"#)]
+async fn httproute_parent_section(w: &mut E2eWorld, name: String, section: String) {
+    let api = http_route_api(w.client().clone());
+    let rt = api.get(&name).await.expect("HTTPRoute");
+    let parent = rt
+        .data
+        .get("spec")
+        .and_then(|s| s.get("parentRefs"))
+        .and_then(|v| v.as_array())
+        .and_then(|a| a.first())
+        .expect("no parentRefs");
+    assert_eq!(
+        parent.get("sectionName").and_then(|v| v.as_str()),
+        Some(section.as_str())
     );
 }
 

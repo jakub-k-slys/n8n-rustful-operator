@@ -300,9 +300,21 @@ spec:
                           namespace:
                             nullable: true
                             type: string
+                          sectionName:
+                            description: |-
+                              Gateway listener (`sectionName`) to attach to. Omit to let the Gateway
+                              pick a compatible listener.
+                            nullable: true
+                            type: string
                         required:
                         - name
                         type: object
+                      httpsRedirectSectionName:
+                        description: |-
+                          When set, also provision a companion HTTPRoute attached to this Gateway
+                          listener (sectionName) that 301-redirects HTTP→HTTPS.
+                        nullable: true
+                        type: string
                     required:
                     - gateway
                     type: object
@@ -756,9 +768,21 @@ spec:
                               namespace:
                                 nullable: true
                                 type: string
+                              sectionName:
+                                description: |-
+                                  Gateway listener (`sectionName`) to attach to. Omit to let the Gateway
+                                  pick a compatible listener.
+                                nullable: true
+                                type: string
                             required:
                             - name
                             type: object
+                          httpsRedirectSectionName:
+                            description: |-
+                              When set, also provision a companion HTTPRoute attached to this Gateway
+                              listener (sectionName) that 301-redirects HTTP→HTTPS.
+                            nullable: true
+                            type: string
                         required:
                         - gateway
                         type: object
@@ -949,9 +973,21 @@ spec:
                               namespace:
                                 nullable: true
                                 type: string
+                              sectionName:
+                                description: |-
+                                  Gateway listener (`sectionName`) to attach to. Omit to let the Gateway
+                                  pick a compatible listener.
+                                nullable: true
+                                type: string
                             required:
                             - name
                             type: object
+                          httpsRedirectSectionName:
+                            description: |-
+                              When set, also provision a companion HTTPRoute attached to this Gateway
+                              listener (sectionName) that 301-redirects HTTP→HTTPS.
+                            nullable: true
+                            type: string
                         required:
                         - gateway
                         type: object
