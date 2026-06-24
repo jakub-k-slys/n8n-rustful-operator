@@ -339,6 +339,35 @@ spec:
                 default: 1
                 format: int32
                 type: integer
+              resources:
+                description: Container CPU/memory requests and limits.
+                nullable: true
+                properties:
+                  limits:
+                    nullable: true
+                    properties:
+                      cpu:
+                        description: CPU quantity, e.g. `500m` or `1`.
+                        nullable: true
+                        type: string
+                      memory:
+                        description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                        nullable: true
+                        type: string
+                    type: object
+                  requests:
+                    nullable: true
+                    properties:
+                      cpu:
+                        description: CPU quantity, e.g. `500m` or `1`.
+                        nullable: true
+                        type: string
+                      memory:
+                        description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                        nullable: true
+                        type: string
+                    type: object
+                type: object
               secureCookie:
                 description: |-
                   Sets `N8N_SECURE_COOKIE`. Omit for the n8n default (true). An `extraEnv`
@@ -766,6 +795,35 @@ spec:
                     default: 1
                     format: int32
                     type: integer
+                  resources:
+                    description: Container CPU/memory requests and limits.
+                    nullable: true
+                    properties:
+                      limits:
+                        nullable: true
+                        properties:
+                          cpu:
+                            description: CPU quantity, e.g. `500m` or `1`.
+                            nullable: true
+                            type: string
+                          memory:
+                            description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                            nullable: true
+                            type: string
+                        type: object
+                      requests:
+                        nullable: true
+                        properties:
+                          cpu:
+                            description: CPU quantity, e.g. `500m` or `1`.
+                            nullable: true
+                            type: string
+                          memory:
+                            description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                            nullable: true
+                            type: string
+                        type: object
+                    type: object
                   service:
                     nullable: true
                     properties:
@@ -913,6 +971,35 @@ spec:
                   replicas:
                     format: int32
                     type: integer
+                  resources:
+                    description: Container CPU/memory requests and limits.
+                    nullable: true
+                    properties:
+                      limits:
+                        nullable: true
+                        properties:
+                          cpu:
+                            description: CPU quantity, e.g. `500m` or `1`.
+                            nullable: true
+                            type: string
+                          memory:
+                            description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                            nullable: true
+                            type: string
+                        type: object
+                      requests:
+                        nullable: true
+                        properties:
+                          cpu:
+                            description: CPU quantity, e.g. `500m` or `1`.
+                            nullable: true
+                            type: string
+                          memory:
+                            description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                            nullable: true
+                            type: string
+                        type: object
+                    type: object
                   service:
                     nullable: true
                     properties:
@@ -994,6 +1081,35 @@ spec:
                     description: Static replica count. Ignored when `autoscaling` is set.
                     format: int32
                     type: integer
+                  resources:
+                    description: Container CPU/memory requests and limits.
+                    nullable: true
+                    properties:
+                      limits:
+                        nullable: true
+                        properties:
+                          cpu:
+                            description: CPU quantity, e.g. `500m` or `1`.
+                            nullable: true
+                            type: string
+                          memory:
+                            description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                            nullable: true
+                            type: string
+                        type: object
+                      requests:
+                        nullable: true
+                        properties:
+                          cpu:
+                            description: CPU quantity, e.g. `500m` or `1`.
+                            nullable: true
+                            type: string
+                          memory:
+                            description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                            nullable: true
+                            type: string
+                        type: object
+                    type: object
                 required:
                 - replicas
                 type: object

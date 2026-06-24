@@ -1,5 +1,6 @@
-use crate::builders::image_pull_secrets;
+use crate::builders::{image_pull_secrets, resources};
 use crate::labels::{common_annotations, common_labels, selector_labels};
+use crate::spec::ResourceRequirements;
 use k8s_openapi::{api::apps::v1::Deployment, apimachinery::pkg::apis::meta::v1::OwnerReference};
 use serde_json::{Value, json};
 
@@ -16,6 +17,8 @@ pub struct DeploymentInputs<'a> {
     pub command: Option<Vec<String>>,
     /// Secret names for pulling the image from a private registry.
     pub image_pull_secrets: &'a [String],
+    /// Container CPU/memory requests and limits, if set for this role.
+    pub resources: Option<&'a ResourceRequirements>,
 }
 
 pub fn build_cluster_deployment(input: &DeploymentInputs<'_>, owner: &OwnerReference) -> Deployment {
@@ -35,6 +38,9 @@ pub fn build_cluster_deployment(input: &DeploymentInputs<'_>, owner: &OwnerRefer
     });
     if let Some(cmd) = &input.command {
         container["command"] = json!(cmd);
+    }
+    if let Some(r) = input.resources {
+        container["resources"] = resources(r);
     }
     let mut pod_spec = json!({ "volumes": input.volumes, "containers": [container] });
     if !input.image_pull_secrets.is_empty() {

@@ -1,5 +1,5 @@
 use crate::spec::{
-    common::{EncryptionKeySpec, EnvVar, PersistenceConfig, ServiceConfig},
+    common::{EncryptionKeySpec, EnvVar, PersistenceConfig, ResourceRequirements, ServiceConfig},
     database::DatabaseSpec,
     networking::NetworkingSpec,
 };
@@ -53,6 +53,9 @@ pub struct SingleSpec {
     /// Names of Secrets used to pull the container image (private registries).
     #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "imagePullSecrets")]
     pub image_pull_secrets: Vec<String>,
+    /// Container CPU/memory requests and limits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resources: Option<ResourceRequirements>,
 }
 
 pub fn default_image() -> String {

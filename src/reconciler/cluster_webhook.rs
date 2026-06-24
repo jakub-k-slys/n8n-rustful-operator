@@ -50,6 +50,7 @@ pub async fn reconcile_webhooks(
             mounts: &bundle.mounts,
             command: Some(vec!["n8n".to_string(), "webhook".to_string()]),
             image_pull_secrets: &c.spec.image_pull_secrets,
+            resources: wh.resources.as_ref(),
         },
         ctx.owner,
     );

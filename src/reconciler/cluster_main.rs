@@ -46,6 +46,7 @@ pub async fn reconcile_main(
             mounts: &mounts,
             command: None,
             image_pull_secrets: &c.spec.image_pull_secrets,
+            resources: c.spec.main.resources.as_ref(),
         },
         ctx.owner,
     );

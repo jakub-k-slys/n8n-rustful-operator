@@ -14,7 +14,8 @@ pub use reconciler::run;
 pub use spec::{
     Autoscaling, CLUSTER_FINALIZER, Cluster, ClusterSpec, ClusterStatus, DatabaseSpec, DatabaseSsl,
     EncryptionKeySpec, EnvVar, EnvVarSource, GatewayRef, HttpRouteConfig, IngressConfig, MainConfig,
-    MysqlConfig, NetworkingSpec, PersistenceConfig, PostgresConfig, RedisConfig, SINGLE_FINALIZER,
-    SecretKeyRef, ServiceConfig, Single, SingleSpec, SingleStatus, SqliteConfig, WebhookConfig, WorkerConfig,
+    MysqlConfig, NetworkingSpec, PersistenceConfig, PostgresConfig, RedisConfig, ResourceList,
+    ResourceRequirements, SINGLE_FINALIZER, SecretKeyRef, ServiceConfig, Single, SingleSpec, SingleStatus,
+    SqliteConfig, WebhookConfig, WorkerConfig,
 };
 pub use state::{Context, Diagnostics, State};

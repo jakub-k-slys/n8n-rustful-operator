@@ -176,3 +176,7 @@ Feature: n8n operator reconciles Single custom resources
     And the Deployment "urls" has env var "N8N_PROTOCOL" set to "http"
     And the Deployment "urls" has env var "WEBHOOK_URL" set to "http://n8n.example.com/"
     And the Deployment "urls" has env var "N8N_EDITOR_BASE_URL" set to "http://n8n.example.com"
+
+  Scenario: resources are applied to the Single container
+    When I apply a Single "sized" with cpu request "200m" and memory limit "1Gi"
+    Then the Deployment "sized" requests cpu "200m" and limits memory "1Gi"
