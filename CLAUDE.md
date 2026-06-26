@@ -55,7 +55,8 @@ env wiring and metrics each live in their own module tree (the controller was or
   their spec/status types, `State`, `Context`, `run`, `Error`, `Metrics`).
 - `src/error.rs` — the `Error` enum used as the reconciler's error type, plus `Result`.
   Variants: `SerializationError`, `KubeError`, `FinalizerError(Box<...>)`, `IllegalSingle`,
-  `ConflictingNetworking`, `IllegalDatabase(String)`, `IllegalCluster(String)`.
+  `ConflictingNetworking`, `IllegalDatabase(String)`, `IllegalCluster(String)`,
+  `IllegalEnv(String)`, `IllegalSmtp(String)`.
   `metric_label()` is the lowercased Debug, used as the Prometheus `error` label.
 - `src/state.rs` — `State` (shared between web server and controller) and `Context`
   (per-reconcile: `Client`, event `Recorder`, `Diagnostics`, `Metrics`). `to_context`
@@ -82,9 +83,20 @@ One module per concern, all re-exported from `spec::*`:
   `PostgresConfig`, `MysqlConfig`, `SqliteConfig`, `DatabaseSsl`.
 - `redis.rs` — `RedisConfig` (queue broker for `Cluster`).
 - `networking.rs` — `NetworkingSpec` (`ingress` **or** `httpRoute`, mutually exclusive),
-  `IngressConfig`, `HttpRouteConfig`, `GatewayRef`.
-- `common.rs` — shared building blocks: `SecretKeyRef`, `EncryptionKeySpec`, `ServiceConfig`,
-  `PersistenceConfig`.
+  `IngressConfig`, `HttpRouteConfig` (with `httpsRedirectSectionName`), `GatewayRef`
+  (with `sectionName`).
+- `storage.rs` — `BinaryDataSpec` (`mode` ∈ `filesystem`/`s3`) and `S3Config` for the
+  `Cluster`'s shared binary-data store (`N8N_DEFAULT_BINARY_DATA_MODE` / external S3).
+- `smtp.rs` — `SmtpConfig` / `SmtpAuth`: email notifications (`N8N_EMAIL_MODE=smtp` plus
+  `N8N_SMTP_*`), credentials via `userSecret`/`passwordSecret`.
+- `logging.rs` — `LoggingConfig`: log level, log output, diagnostics, version
+  notifications and the Prometheus metrics toggle.
+- `pod.rs` — `PodConfig`: pod-level scheduling/metadata (`serviceAccountName`,
+  `nodeSelector`, free-form `tolerations`/`affinity` carrying
+  `x-kubernetes-preserve-unknown-fields`, plus `podLabels`/`podAnnotations`).
+- `common.rs` — shared building blocks: `SecretKeyRef`, `EncryptionKeySpec`, `EnvVar`
+  (inline `value` **or** `valueFrom.secretRef`, mutually exclusive), `EnvVarSource`,
+  `ServiceConfig`, `PersistenceConfig`, `ResourceRequirements`/`ResourceList`.
 
 The `#[kube(...)]` attribute sets `plural` explicitly (`singles`, `clusters`) — without it,
 kube-derive would mis-pluralize. The finalizer strings mirror the CRD names
@@ -106,10 +118,13 @@ kube-derive would mis-pluralize. The finalizer strings mirror the CRD names
 - `encryption.rs` — `resolve_encryption_secret`: returns the user's `secretRef` if given,
   otherwise creates a random 32-byte hex `Secret` named `<name>-encryption-key` (owned by
   the CR) if it doesn't already exist.
-- `validate.rs` — `validate_database` (type/sub-block consistency) and `validate_cluster`
-  (also rejects `sqlite`, which queue mode cannot use).
+- `validate.rs` — `validate_database` (type/sub-block consistency), `validate_extra_env`
+  (rejects operator-managed names and requires exactly one of `value`/`valueFrom`),
+  `validate_smtp` (port range), and `validate_cluster` (also rejects `sqlite`, validates
+  every role's `extraEnv`, `smtp`, and `binaryData`).
 - `single_validate.rs` — `validate_single`: rejects name `"illegal"` (test hook →
-  `Error::IllegalSingle`), conflicting `ingress`+`httpRoute`, and bad database config.
+  `Error::IllegalSingle`), conflicting `ingress`+`httpRoute`, bad database config, and
+  validates `extraEnv` + `smtp`.
 - `single_children.rs` — applies the `Single`'s PVC (if any), `Deployment`, `Service`, and
   networking.
 - `cluster_main.rs`, `cluster_worker.rs`, `cluster_webhook.rs`, `cluster_main_volumes.rs` —
@@ -122,14 +137,23 @@ kube-derive would mis-pluralize. The finalizer strings mirror the CRD names
 ### `src/builders/` — pure object constructors
 
 `build_deployment`, `build_cluster_deployment`, `build_service`, `build_ingress`,
-`build_http_route`, `build_hpa`, `build_data_pvc`, and `volumes` (DB/SSL volume + mount
-wiring). These take spec + owner and return the JSON/typed object to apply — no I/O.
+`build_http_route` (primary route + optional `<name>-redirect` companion), `build_hpa`,
+`build_data_pvc`, and `volumes` (DB/SSL volume + mount wiring). `mod.rs` also holds the
+shared pod-spec helpers `image_pull_secrets`, `resources`, and `apply_pod_config`. These
+take spec + owner and return the JSON/typed object to apply — no I/O.
 
 ### `src/env/` — n8n environment variables
 
-`env_str` / `env_secret` helpers, plus `database.rs` (maps `DatabaseSpec` to `DB_*` env and
-SSL cert mounts) and `redis.rs` (`build_cluster_common_env` — `EXECUTIONS_MODE=queue`,
-`QUEUE_BULL_REDIS_*`, encryption key, etc., shared by all cluster roles).
+`env_str` / `env_secret` helpers and `build_user_env` (layers, low→high: operator
+`defaults` like host-derived URLs/SMTP/logging, the `secureCookie` sugar, cluster-wide
+`extraEnv`, per-role `extraEnv`; deduped by name so any default is `extraEnv`-overridable,
+and each entry renders as an inline `value` or a `valueFrom.secretKeyRef`). Also
+`host_env`/`protocol_for` (derive `N8N_HOST`/`N8N_PROTOCOL`/`WEBHOOK_URL`/
+`N8N_EDITOR_BASE_URL` from a role's host). Per-concern modules: `database.rs`
+(`DatabaseSpec` → `DB_*` + SSL cert mounts), `redis.rs` (`build_cluster_common_env` —
+`EXECUTIONS_MODE=queue`, `QUEUE_BULL_REDIS_*`, encryption key, binary-data, shared by all
+cluster roles), `storage.rs` (`build_binary_data_env`), `smtp.rs` (`build_smtp_env`),
+`logging.rs` (`build_logging_env`).
 
 ### `src/metrics/` — Prometheus
 
