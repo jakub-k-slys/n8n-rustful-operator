@@ -428,6 +428,65 @@ spec:
                     description: '`ClusterIP` (default), `NodePort`, or `LoadBalancer`.'
                     type: string
                 type: object
+              smtp:
+                description: SMTP notification settings (sets `N8N_EMAIL_MODE`/`N8N_SMTP_*`).
+                nullable: true
+                properties:
+                  auth:
+                    description: Credentials; omit for relays that accept unauthenticated mail.
+                    nullable: true
+                    properties:
+                      passwordSecret:
+                        description: '`N8N_SMTP_PASS`, sourced from a Secret.'
+                        properties:
+                          key:
+                            default: encryption_key
+                            description: Key within the Secret. Defaults to `encryption_key`.
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      userSecret:
+                        description: '`N8N_SMTP_USER`, sourced from a Secret.'
+                        properties:
+                          key:
+                            default: encryption_key
+                            description: Key within the Secret. Defaults to `encryption_key`.
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - passwordSecret
+                    - userSecret
+                    type: object
+                  host:
+                    type: string
+                  port:
+                    format: uint16
+                    maximum: 65535.0
+                    minimum: 0.0
+                    type: integer
+                  sender:
+                    description: '`N8N_SMTP_SENDER`, e.g. `n8n <no-reply@example.com>`.'
+                    type: string
+                  ssl:
+                    description: '`N8N_SMTP_SSL` — implicit TLS (usually port 465).'
+                    nullable: true
+                    type: boolean
+                  startTls:
+                    description: '`N8N_SMTP_STARTTLS` — STARTTLS upgrade (usually port 587).'
+                    nullable: true
+                    type: boolean
+                required:
+                - host
+                - port
+                - sender
+                type: object
             type: object
           status:
             nullable: true
@@ -1032,6 +1091,65 @@ spec:
                   An `extraEnv` entry of the same name overrides this.
                 nullable: true
                 type: boolean
+              smtp:
+                description: SMTP notification settings, shared by every role.
+                nullable: true
+                properties:
+                  auth:
+                    description: Credentials; omit for relays that accept unauthenticated mail.
+                    nullable: true
+                    properties:
+                      passwordSecret:
+                        description: '`N8N_SMTP_PASS`, sourced from a Secret.'
+                        properties:
+                          key:
+                            default: encryption_key
+                            description: Key within the Secret. Defaults to `encryption_key`.
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      userSecret:
+                        description: '`N8N_SMTP_USER`, sourced from a Secret.'
+                        properties:
+                          key:
+                            default: encryption_key
+                            description: Key within the Secret. Defaults to `encryption_key`.
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - passwordSecret
+                    - userSecret
+                    type: object
+                  host:
+                    type: string
+                  port:
+                    format: uint16
+                    maximum: 65535.0
+                    minimum: 0.0
+                    type: integer
+                  sender:
+                    description: '`N8N_SMTP_SENDER`, e.g. `n8n <no-reply@example.com>`.'
+                    type: string
+                  ssl:
+                    description: '`N8N_SMTP_SSL` — implicit TLS (usually port 465).'
+                    nullable: true
+                    type: boolean
+                  startTls:
+                    description: '`N8N_SMTP_STARTTLS` — STARTTLS upgrade (usually port 587).'
+                    nullable: true
+                    type: boolean
+                required:
+                - host
+                - port
+                - sender
+                type: object
               webhooks:
                 nullable: true
                 properties:

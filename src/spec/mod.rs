@@ -6,6 +6,7 @@ pub mod pod;
 pub mod redis;
 pub mod roles;
 pub mod single;
+pub mod smtp;
 pub mod storage;
 
 pub use cluster::{CLUSTER_FINALIZER, Cluster, ClusterSpec, ClusterStatus};
@@ -19,4 +20,5 @@ pub use pod::PodConfig;
 pub use redis::RedisConfig;
 pub use roles::{Autoscaling, MainConfig, WebhookConfig, WorkerConfig};
 pub use single::{SINGLE_FINALIZER, Single, SingleSpec, SingleStatus};
+pub use smtp::{SmtpAuth, SmtpConfig};
 pub use storage::{BinaryDataSpec, S3Config};
