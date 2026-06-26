@@ -285,6 +285,31 @@ spec:
                 items:
                   type: string
                 type: array
+              logging:
+                description: Logging, diagnostics and metrics toggles.
+                nullable: true
+                properties:
+                  diagnostics:
+                    description: '`N8N_DIAGNOSTICS_ENABLED` — anonymous telemetry to n8n.'
+                    nullable: true
+                    type: boolean
+                  level:
+                    description: '`N8N_LOG_LEVEL`, e.g. `error`, `warn`, `info`, `debug`.'
+                    nullable: true
+                    type: string
+                  metrics:
+                    description: '`N8N_METRICS` — expose the Prometheus `/metrics` endpoint.'
+                    nullable: true
+                    type: boolean
+                  output:
+                    description: '`N8N_LOG_OUTPUT`, e.g. `console`, `file`, or `console,file`.'
+                    nullable: true
+                    type: string
+                  versionNotifications:
+                    description: '`N8N_VERSION_NOTIFICATIONS_ENABLED` — in-app update notices.'
+                    nullable: true
+                    type: boolean
+                type: object
               networking:
                 nullable: true
                 properties:
@@ -851,6 +876,31 @@ spec:
                 items:
                   type: string
                 type: array
+              logging:
+                description: Logging, diagnostics and metrics toggles, shared by every role.
+                nullable: true
+                properties:
+                  diagnostics:
+                    description: '`N8N_DIAGNOSTICS_ENABLED` — anonymous telemetry to n8n.'
+                    nullable: true
+                    type: boolean
+                  level:
+                    description: '`N8N_LOG_LEVEL`, e.g. `error`, `warn`, `info`, `debug`.'
+                    nullable: true
+                    type: string
+                  metrics:
+                    description: '`N8N_METRICS` — expose the Prometheus `/metrics` endpoint.'
+                    nullable: true
+                    type: boolean
+                  output:
+                    description: '`N8N_LOG_OUTPUT`, e.g. `console`, `file`, or `console,file`.'
+                    nullable: true
+                    type: string
+                  versionNotifications:
+                    description: '`N8N_VERSION_NOTIFICATIONS_ENABLED` — in-app update notices.'
+                    nullable: true
+                    type: boolean
+                type: object
               main:
                 default:
                   replicas: 0

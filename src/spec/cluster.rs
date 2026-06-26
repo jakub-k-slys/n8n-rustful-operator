@@ -1,6 +1,7 @@
 use crate::spec::{
     common::{EncryptionKeySpec, EnvVar},
     database::DatabaseSpec,
+    logging::LoggingConfig,
     redis::RedisConfig,
     roles::{MainConfig, WebhookConfig, WorkerConfig},
     single::default_image,
@@ -57,6 +58,9 @@ pub struct ClusterSpec {
     /// SMTP notification settings, shared by every role.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub smtp: Option<SmtpConfig>,
+    /// Logging, diagnostics and metrics toggles, shared by every role.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logging: Option<LoggingConfig>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug, JsonSchema)]

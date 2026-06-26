@@ -1,6 +1,7 @@
 pub mod cluster;
 pub mod common;
 pub mod database;
+pub mod logging;
 pub mod networking;
 pub mod pod;
 pub mod redis;
@@ -15,6 +16,7 @@ pub use common::{
     SecretKeyRef, ServiceConfig, default_service_type,
 };
 pub use database::{DatabaseSpec, DatabaseSsl, MysqlConfig, PostgresConfig, SqliteConfig};
+pub use logging::LoggingConfig;
 pub use networking::{GatewayRef, HttpRouteConfig, IngressConfig, NetworkingSpec};
 pub use pod::PodConfig;
 pub use redis::RedisConfig;

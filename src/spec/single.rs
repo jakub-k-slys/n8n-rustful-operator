@@ -1,6 +1,7 @@
 use crate::spec::{
     common::{EncryptionKeySpec, EnvVar, PersistenceConfig, ResourceRequirements, ServiceConfig},
     database::DatabaseSpec,
+    logging::LoggingConfig,
     networking::NetworkingSpec,
     pod::PodConfig,
     smtp::SmtpConfig,
@@ -64,6 +65,9 @@ pub struct SingleSpec {
     /// SMTP notification settings (sets `N8N_EMAIL_MODE`/`N8N_SMTP_*`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub smtp: Option<SmtpConfig>,
+    /// Logging, diagnostics and metrics toggles.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logging: Option<LoggingConfig>,
 }
 
 pub fn default_image() -> String {

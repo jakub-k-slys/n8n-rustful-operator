@@ -50,6 +50,7 @@ fn base_spec(image: &str) -> SingleSpec {
         resources: None,
         pod: None,
         smtp: None,
+        logging: None,
         image: image.into(),
         replicas: 1,
         host: Some("e2e.example.com".into()),
@@ -294,6 +295,20 @@ async fn when_apply_smtp(
             },
             password_secret: n8n_rustful_operator::SecretKeyRef { name: secret, key },
         }),
+    });
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[when(
+    regex = r#"^I apply a Single "([^"]+)" with log level "([^"]+)" diagnostics "(true|false)" and metrics "(true|false)"$"#
+)]
+async fn when_apply_logging(w: &mut E2eWorld, name: String, level: String, diagnostics: bool, metrics: bool) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.logging = Some(n8n_rustful_operator::LoggingConfig {
+        level: Some(level),
+        diagnostics: Some(diagnostics),
+        metrics: Some(metrics),
+        ..Default::default()
     });
     apply_with_spec(w, &name, spec).await;
 }
@@ -1080,6 +1095,7 @@ fn base_cluster_spec() -> ClusterSpec {
         image_pull_secrets: vec![],
         binary_data: None,
         smtp: None,
+        logging: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1157,6 +1173,7 @@ async fn apply_cluster_full(
         image_pull_secrets: vec![],
         binary_data: None,
         smtp: None,
+        logging: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1215,6 +1232,7 @@ async fn apply_cluster_with_main_pv(w: &mut E2eWorld, name: String, size: String
         image_pull_secrets: vec![],
         binary_data: None,
         smtp: None,
+        logging: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1267,6 +1285,7 @@ async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
         image_pull_secrets: vec![],
         binary_data: None,
         smtp: None,
+        logging: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1428,6 +1447,7 @@ async fn apply_cluster_byo_key(w: &mut E2eWorld, name: String, secret: String, k
         image_pull_secrets: vec![],
         binary_data: None,
         smtp: None,
+        logging: None,
         image: "nginx:alpine".into(),
         encryption_key: Some(EncryptionKeySpec {
             secret_ref: Some(SecretKeyRef { name: secret, key }),
@@ -1474,6 +1494,7 @@ async fn apply_cluster_main_ingress(w: &mut E2eWorld, name: String, class: Strin
         image_pull_secrets: vec![],
         binary_data: None,
         smtp: None,
+        logging: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1553,6 +1574,7 @@ async fn apply_cluster_image_overrides(
         image_pull_secrets: vec![],
         binary_data: None,
         smtp: None,
+        logging: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1598,6 +1620,7 @@ async fn apply_cluster_redis_prefix(w: &mut E2eWorld, name: String, prefix: Stri
         image_pull_secrets: vec![],
         binary_data: None,
         smtp: None,
+        logging: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1876,6 +1899,7 @@ async fn apply_cluster_main_route(
         image_pull_secrets: vec![],
         binary_data: None,
         smtp: None,
+        logging: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -2013,6 +2037,7 @@ async fn apply_cluster_hpa(w: &mut E2eWorld, name: String, min: i32, max: i32) {
         image_pull_secrets: vec![],
         binary_data: None,
         smtp: None,
+        logging: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {

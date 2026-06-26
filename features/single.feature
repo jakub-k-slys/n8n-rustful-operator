@@ -198,3 +198,9 @@ Feature: n8n operator reconciles Single custom resources
     And the Deployment "mailer" has env var "N8N_SMTP_HOST" set to "smtp.example.com"
     And the Deployment "mailer" has env var "N8N_SMTP_PORT" set to "587"
     And the Deployment "mailer" sources env var "N8N_SMTP_PASS" from secret "n8n-smtp" key "password"
+
+  Scenario: logging config wires log/diagnostics/metrics env
+    When I apply a Single "logged" with log level "debug" diagnostics "false" and metrics "true"
+    Then the Deployment "logged" has env var "N8N_LOG_LEVEL" set to "debug"
+    And the Deployment "logged" has env var "N8N_DIAGNOSTICS_ENABLED" set to "false"
+    And the Deployment "logged" has env var "N8N_METRICS" set to "true"
