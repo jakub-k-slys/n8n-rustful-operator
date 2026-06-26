@@ -124,9 +124,9 @@ Feature: n8n operator reconciles Cluster custom resources
   Scenario: secureCookie sets N8N_SECURE_COOKIE on every role
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"
     And a Secret "redis-creds" exists with key "password" set to "rs3cret"
-    When I apply a Cluster "cookie" with secureCookie false
-    Then the Deployment "cookie-main" has env var "N8N_SECURE_COOKIE" set to "false"
-    And the Deployment "cookie-worker" has env var "N8N_SECURE_COOKIE" set to "false"
+    When I apply a Cluster "cluster-cookie" with secureCookie false
+    Then the Deployment "cluster-cookie-main" has env var "N8N_SECURE_COOKIE" set to "false"
+    And the Deployment "cluster-cookie-worker" has env var "N8N_SECURE_COOKIE" set to "false"
 
   Scenario: A role's extraEnv overrides the cluster-wide secureCookie
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"

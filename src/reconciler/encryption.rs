@@ -46,10 +46,14 @@ pub async fn resolve_encryption_secret<R: ResourceExt>(
             type_: Some("Opaque".to_string()),
             ..Default::default()
         };
-        secrets
-            .create(&Default::default(), &secret)
-            .await
-            .map_err(Error::KubeError)?;
+        // Tolerate a concurrent creator (or a name reused by another CR): a 409
+        // AlreadyExists means the Secret now exists, which is the desired state —
+        // don't fail the whole reconcile over it.
+        match secrets.create(&Default::default(), &secret).await {
+            Ok(_) => {}
+            Err(kube::Error::Api(ae)) if ae.code == 409 => {}
+            Err(e) => return Err(Error::KubeError(e)),
+        }
     }
     Ok(SecretKeyRef { name, key })
 }
