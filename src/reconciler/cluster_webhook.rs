@@ -5,7 +5,9 @@ use crate::{
         http_route::delete_http_route,
         service::build_cluster_service,
     },
-    env::{build_user_env, env_str, host_env, protocol_for, smtp::build_smtp_env},
+    env::{
+        build_user_env, env_str, host_env, logging::build_logging_env, protocol_for, smtp::build_smtp_env,
+    },
     reconciler::{
         ctx::{ApplyCtx, Bundle},
         networking::{RoleNetworking, reconcile_role_networking},
@@ -35,6 +37,9 @@ pub async fn reconcile_webhooks(
     let mut defaults = host_env(wh.host.as_deref(), protocol_for(wh.networking.as_ref()));
     if let Some(s) = &c.spec.smtp {
         defaults.extend(build_smtp_env(s));
+    }
+    if let Some(l) = &c.spec.logging {
+        defaults.extend(build_logging_env(l));
     }
     env.extend(build_user_env(
         &defaults,

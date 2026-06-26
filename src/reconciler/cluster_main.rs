@@ -4,7 +4,7 @@ use crate::{
         cluster_deployment::{DeploymentInputs, build_cluster_deployment},
         service::build_cluster_service,
     },
-    env::{build_user_env, host_env, protocol_for, smtp::build_smtp_env},
+    env::{build_user_env, host_env, logging::build_logging_env, protocol_for, smtp::build_smtp_env},
     reconciler::{
         cluster_main_volumes::main_volumes,
         ctx::{ApplyCtx, Bundle},
@@ -31,6 +31,9 @@ pub async fn reconcile_main(
     );
     if let Some(s) = &c.spec.smtp {
         defaults.extend(build_smtp_env(s));
+    }
+    if let Some(l) = &c.spec.logging {
+        defaults.extend(build_logging_env(l));
     }
     env.extend(build_user_env(
         &defaults,
