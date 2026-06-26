@@ -16,6 +16,6 @@ pub use spec::{
     DatabaseSsl, EncryptionKeySpec, EnvVar, EnvVarSource, GatewayRef, HttpRouteConfig, IngressConfig,
     MainConfig, MysqlConfig, NetworkingSpec, PersistenceConfig, PodConfig, PostgresConfig, RedisConfig,
     ResourceList, ResourceRequirements, S3Config, SINGLE_FINALIZER, SecretKeyRef, ServiceConfig, Single,
-    SingleSpec, SingleStatus, SqliteConfig, WebhookConfig, WorkerConfig,
+    SingleSpec, SingleStatus, SmtpAuth, SmtpConfig, SqliteConfig, WebhookConfig, WorkerConfig,
 };
 pub use state::{Context, Diagnostics, State};

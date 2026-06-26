@@ -4,6 +4,7 @@ use crate::spec::{
     redis::RedisConfig,
     roles::{MainConfig, WebhookConfig, WorkerConfig},
     single::default_image,
+    smtp::SmtpConfig,
     storage::BinaryDataSpec,
 };
 use kube::CustomResource;
@@ -53,6 +54,9 @@ pub struct ClusterSpec {
     /// filesystem default (which does not share data between main and workers).
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "binaryData")]
     pub binary_data: Option<BinaryDataSpec>,
+    /// SMTP notification settings, shared by every role.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub smtp: Option<SmtpConfig>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug, JsonSchema)]

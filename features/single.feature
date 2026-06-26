@@ -191,3 +191,10 @@ Feature: n8n operator reconciles Single custom resources
   Scenario: pod scheduling is applied to the Single Deployment
     When I apply a Single "scheduled" with serviceAccount "n8n-sa" and nodeSelector "disktype"="ssd"
     Then the Deployment "scheduled" runs as serviceAccount "n8n-sa" with nodeSelector "disktype"="ssd"
+
+  Scenario: smtp config wires the n8n email env
+    When I apply a Single "mailer" with smtp host "smtp.example.com" port 587 and password secret "n8n-smtp" key "password"
+    Then the Deployment "mailer" has env var "N8N_EMAIL_MODE" set to "smtp"
+    And the Deployment "mailer" has env var "N8N_SMTP_HOST" set to "smtp.example.com"
+    And the Deployment "mailer" has env var "N8N_SMTP_PORT" set to "587"
+    And the Deployment "mailer" sources env var "N8N_SMTP_PASS" from secret "n8n-smtp" key "password"

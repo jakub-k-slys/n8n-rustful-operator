@@ -1,6 +1,6 @@
 use crate::{
     Error, Result,
-    spec::{Cluster, DatabaseSpec, EnvVar},
+    spec::{Cluster, DatabaseSpec, EnvVar, SmtpConfig},
 };
 
 /// Env names (and prefixes) the operator wires itself; users may not shadow
@@ -30,6 +30,15 @@ pub fn validate_extra_env(env: &[EnvVar]) -> Result<()> {
                 e.name
             )));
         }
+    }
+    Ok(())
+}
+
+pub fn validate_smtp(smtp: Option<&SmtpConfig>) -> Result<()> {
+    if let Some(s) = smtp
+        && s.port == 0
+    {
+        return Err(Error::IllegalSmtp("smtp.port must be 1-65535".into()));
     }
     Ok(())
 }
@@ -92,6 +101,7 @@ pub fn validate_cluster(c: &Cluster) -> Result<()> {
     if let Some(wh) = &c.spec.webhooks {
         validate_extra_env(&wh.extra_env)?;
     }
+    validate_smtp(c.spec.smtp.as_ref())?;
     if let Some(bd) = &c.spec.binary_data {
         if !matches!(bd.mode.as_str(), "filesystem" | "s3") {
             return Err(Error::IllegalCluster(format!(

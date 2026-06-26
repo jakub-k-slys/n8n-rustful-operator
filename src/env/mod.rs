@@ -1,5 +1,6 @@
 pub mod database;
 pub mod redis;
+pub mod smtp;
 pub mod storage;
 
 use crate::spec::{EnvVar, NetworkingSpec, SecretKeyRef};

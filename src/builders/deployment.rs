@@ -3,7 +3,7 @@ use crate::{
         apply_pod_config, image_pull_secrets, pvc::build_persistence_volume, resources,
         volumes::build_db_volumes,
     },
-    env::{build_user_env, database::build_db_env, host_env, protocol_for},
+    env::{build_user_env, database::build_db_env, host_env, protocol_for, smtp::build_smtp_env},
     labels::{common_annotations, common_labels, selector_labels},
     spec::{SecretKeyRef, SingleSpec},
 };
@@ -37,7 +37,10 @@ pub fn build_deployment(
         volumes.push(v);
         mounts.push(m);
     }
-    let defaults = host_env(spec.host.as_deref(), protocol_for(spec.networking.as_ref()));
+    let mut defaults = host_env(spec.host.as_deref(), protocol_for(spec.networking.as_ref()));
+    if let Some(s) = &spec.smtp {
+        defaults.extend(build_smtp_env(s));
+    }
     env.extend(build_user_env(
         &defaults,
         spec.secure_cookie,

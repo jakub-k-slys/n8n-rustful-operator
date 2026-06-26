@@ -3,6 +3,7 @@ use crate::spec::{
     database::DatabaseSpec,
     networking::NetworkingSpec,
     pod::PodConfig,
+    smtp::SmtpConfig,
 };
 use kube::CustomResource;
 use schemars::JsonSchema;
@@ -60,6 +61,9 @@ pub struct SingleSpec {
     /// Pod-level scheduling and metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pod: Option<PodConfig>,
+    /// SMTP notification settings (sets `N8N_EMAIL_MODE`/`N8N_SMTP_*`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub smtp: Option<SmtpConfig>,
 }
 
 pub fn default_image() -> String {

@@ -5,7 +5,7 @@ use crate::{
         http_route::delete_http_route,
         service::build_cluster_service,
     },
-    env::{build_user_env, env_str, host_env, protocol_for},
+    env::{build_user_env, env_str, host_env, protocol_for, smtp::build_smtp_env},
     reconciler::{
         ctx::{ApplyCtx, Bundle},
         networking::{RoleNetworking, reconcile_role_networking},
@@ -32,7 +32,10 @@ pub async fn reconcile_webhooks(
     let image = wh.image.clone().unwrap_or_else(|| c.spec.image.clone());
     let mut env = bundle.env.clone();
     env.push(env_str("N8N_DISABLE_PRODUCTION_MAIN_PROCESS", "true"));
-    let defaults = host_env(wh.host.as_deref(), protocol_for(wh.networking.as_ref()));
+    let mut defaults = host_env(wh.host.as_deref(), protocol_for(wh.networking.as_ref()));
+    if let Some(s) = &c.spec.smtp {
+        defaults.extend(build_smtp_env(s));
+    }
     env.extend(build_user_env(
         &defaults,
         c.spec.secure_cookie,
