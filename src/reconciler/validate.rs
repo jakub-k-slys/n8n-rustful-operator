@@ -119,11 +119,6 @@ pub fn validate_cluster(c: &Cluster) -> Result<()> {
         validate_extra_env(&wh.extra_env)?;
     }
     validate_smtp(c.spec.smtp.as_ref())?;
-    if c.spec.main.replicas > 1 && c.spec.main.multi_main != Some(true) {
-        return Err(Error::IllegalCluster(
-            "main.replicas > 1 requires main.multiMain=true (n8n Enterprise multi-main setup)".into(),
-        ));
-    }
     validate_community(c.spec.community_nodes.as_ref())?;
     if let Some(bd) = &c.spec.binary_data {
         if !matches!(bd.mode.as_str(), "default" | "database" | "filesystem" | "s3") {

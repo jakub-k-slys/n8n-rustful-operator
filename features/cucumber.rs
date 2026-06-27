@@ -1636,16 +1636,8 @@ async fn apply_cluster_fs_binary(w: &mut E2eWorld, name: String, size: String) {
     apply_cluster(w, &name, spec).await;
 }
 
-#[when(regex = r#"^I apply a Cluster "([^"]+)" with multi-main and (\d+) main replicas$"#)]
-async fn apply_cluster_multi_main(w: &mut E2eWorld, name: String, replicas: i32) {
-    let mut spec = base_cluster_spec();
-    spec.main.replicas = replicas;
-    spec.main.multi_main = Some(true);
-    apply_cluster(w, &name, spec).await;
-}
-
-#[when(regex = r#"^I apply a Cluster "([^"]+)" with (\d+) main replicas and no multi-main$"#)]
-async fn apply_cluster_multi_main_invalid(w: &mut E2eWorld, name: String, replicas: i32) {
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with (\d+) main replicas$"#)]
+async fn apply_cluster_main_replicas(w: &mut E2eWorld, name: String, replicas: i32) {
     let mut spec = base_cluster_spec();
     spec.main.replicas = replicas;
     apply_cluster(w, &name, spec).await;

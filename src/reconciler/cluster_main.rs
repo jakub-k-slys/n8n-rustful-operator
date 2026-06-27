@@ -26,7 +26,9 @@ pub async fn reconcile_main(
 ) -> Result<()> {
     let name = format!("{cluster_name}-main");
     let image = c.spec.main.image.clone().unwrap_or_else(|| c.spec.image.clone());
-    let multi_main = c.spec.main.multi_main == Some(true);
+    // More than one main requires n8n's multi-main HA setup, otherwise each
+    // main duplicates the at-most-once tasks. Auto-enable it.
+    let multi_main = c.spec.main.replicas > 1;
     let (vols, mounts) = main_volumes(c, &name, &image, ctx, bundle).await?;
     let mut env = bundle.env.clone();
     if multi_main {
