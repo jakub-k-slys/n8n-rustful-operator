@@ -1022,6 +1022,20 @@ spec:
                   image:
                     nullable: true
                     type: string
+                  multiMainCheckInterval:
+                    description: '`N8N_MULTI_MAIN_SETUP_CHECK_INTERVAL` — leader check interval in seconds.'
+                    format: uint32
+                    minimum: 0.0
+                    nullable: true
+                    type: integer
+                  multiMainKeyTtl:
+                    description: |-
+                      `N8N_MULTI_MAIN_SETUP_KEY_TTL` — leader key TTL in seconds. Only takes
+                      effect when multi-main is active (i.e. `replicas` > 1).
+                    format: uint32
+                    minimum: 0.0
+                    nullable: true
+                    type: integer
                   networking:
                     nullable: true
                     properties:
@@ -1120,6 +1134,11 @@ spec:
                     type: object
                   replicas:
                     default: 1
+                    description: |-
+                      Number of main pods. More than one auto-enables n8n's multi-main HA setup
+                      (`N8N_MULTI_MAIN_SETUP_ENABLED` + `ClientIP` session affinity on the main
+                      Service) so the at-most-once tasks (timers/pollers/pruning) aren't
+                      duplicated. Multi-main is an n8n Enterprise feature and needs a license.
                     format: int32
                     type: integer
                   resources:

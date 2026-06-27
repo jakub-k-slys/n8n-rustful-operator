@@ -80,6 +80,7 @@ pub async fn reconcile_webhooks(
                 &image,
                 "webhook",
                 wh.service.as_ref(),
+                false,
                 ctx.owner,
             )),
         )

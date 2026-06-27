@@ -14,7 +14,7 @@ pub fn build_service(name: &str, spec: &SingleSpec, owner: &OwnerReference) -> S
         .as_ref()
         .map(|s| s.type_.clone())
         .unwrap_or_else(default_service_type);
-    service_with_labels(name, &spec.image, "workflow-engine", svc_type, owner)
+    service_with_labels(name, &spec.image, "workflow-engine", svc_type, false, owner)
 }
 
 pub fn build_cluster_service(
@@ -22,10 +22,11 @@ pub fn build_cluster_service(
     image: &str,
     component: &str,
     svc: Option<&ServiceConfig>,
+    session_affinity: bool,
     owner: &OwnerReference,
 ) -> Service {
     let svc_type = svc.map(|s| s.type_.clone()).unwrap_or_else(default_service_type);
-    service_with_labels(name, image, component, svc_type, owner)
+    service_with_labels(name, image, component, svc_type, session_affinity, owner)
 }
 
 fn service_with_labels(
@@ -33,6 +34,7 @@ fn service_with_labels(
     image: &str,
     component: &str,
     svc_type: String,
+    session_affinity: bool,
     owner: &OwnerReference,
 ) -> Service {
     let selector = selector_labels(name);
@@ -55,6 +57,8 @@ fn service_with_labels(
                 ..Default::default()
             }]),
             type_: Some(svc_type),
+            // Multi-main needs sticky sessions in front of the main pods.
+            session_affinity: session_affinity.then(|| "ClientIP".to_string()),
             ..Default::default()
         }),
         ..Default::default()

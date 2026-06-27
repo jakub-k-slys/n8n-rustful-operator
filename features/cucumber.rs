@@ -432,6 +432,30 @@ async fn service_has_type(w: &mut E2eWorld, name: String, expected: String) {
     .await;
 }
 
+#[then(regex = r#"^the Service "([^"]+)" has session affinity "([^"]+)"$"#)]
+async fn service_session_affinity(w: &mut E2eWorld, name: String, expected: String) {
+    let client = w.client().clone();
+    let n = name.clone();
+    let exp = expected.clone();
+    wait_until(
+        60,
+        &format!("Service/{name} sessionAffinity={expected}"),
+        move || {
+            let client = client.clone();
+            let n = n.clone();
+            let exp = exp.clone();
+            async move {
+                let api: Api<Service> = Api::namespaced(client, NS);
+                match api.get_opt(&n).await.unwrap() {
+                    Some(svc) => svc.spec.and_then(|s| s.session_affinity) == Some(exp),
+                    None => false,
+                }
+            }
+        },
+    )
+    .await;
+}
+
 #[then(regex = r#"^the Single "([^"]+)" has status.ready set to true within (\d+) seconds$"#)]
 async fn status_ready(w: &mut E2eWorld, name: String, secs: u64) {
     let client = w.client().clone();
@@ -1609,6 +1633,13 @@ async fn apply_cluster_fs_binary(w: &mut E2eWorld, name: String, size: String) {
             access_mode: "ReadWriteMany".into(),
         }),
     });
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with (\d+) main replicas$"#)]
+async fn apply_cluster_main_replicas(w: &mut E2eWorld, name: String, replicas: i32) {
+    let mut spec = base_cluster_spec();
+    spec.main.replicas = replicas;
     apply_cluster(w, &name, spec).await;
 }
 

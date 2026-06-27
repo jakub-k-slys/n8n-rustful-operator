@@ -8,6 +8,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 pub struct MainConfig {
+    /// Number of main pods. More than one auto-enables n8n's multi-main HA setup
+    /// (`N8N_MULTI_MAIN_SETUP_ENABLED` + `ClientIP` session affinity on the main
+    /// Service) so the at-most-once tasks (timers/pollers/pruning) aren't
+    /// duplicated. Multi-main is an n8n Enterprise feature and needs a license.
     #[serde(default = "default_main_replicas")]
     pub replicas: i32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -30,6 +34,17 @@ pub struct MainConfig {
     /// Pod-level scheduling and metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pod: Option<PodConfig>,
+    /// `N8N_MULTI_MAIN_SETUP_KEY_TTL` — leader key TTL in seconds. Only takes
+    /// effect when multi-main is active (i.e. `replicas` > 1).
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "multiMainKeyTtl")]
+    pub multi_main_key_ttl: Option<u32>,
+    /// `N8N_MULTI_MAIN_SETUP_CHECK_INTERVAL` — leader check interval in seconds.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "multiMainCheckInterval"
+    )]
+    pub multi_main_check_interval: Option<u32>,
 }
 
 fn default_main_replicas() -> i32 {
