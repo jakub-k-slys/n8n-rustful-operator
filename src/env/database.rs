@@ -14,7 +14,7 @@ pub fn build_db_env(db: &DatabaseSpec) -> Vec<Value> {
                     out.push(env_str("DB_POSTGRESDB_PORT", p.to_string()));
                 }
                 out.push(json!({ "name": "DB_POSTGRESDB_DATABASE", "value": pg.database }));
-                out.push(json!({ "name": "DB_POSTGRESDB_USER", "value": pg.user }));
+                out.push(env_secret("DB_POSTGRESDB_USER", &pg.user_secret));
                 out.push(env_secret("DB_POSTGRESDB_PASSWORD", &pg.password_secret));
                 if let Some(s) = &pg.schema {
                     out.push(json!({ "name": "DB_POSTGRESDB_SCHEMA", "value": s }));

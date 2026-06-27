@@ -25,7 +25,9 @@ pub struct PostgresConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub port: Option<i32>,
     pub database: String,
-    pub user: String,
+    /// DB user, sourced from a Secret (plaintext is not supported).
+    #[serde(rename = "userSecret")]
+    pub user_secret: SecretKeyRef,
     #[serde(rename = "passwordSecret")]
     pub password_secret: SecretKeyRef,
     #[serde(default, skip_serializing_if = "Option::is_none")]

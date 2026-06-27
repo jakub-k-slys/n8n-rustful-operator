@@ -58,20 +58,22 @@ Feature: n8n operator reconciles Single custom resources
 
   Scenario: Postgres database wires host, user, schema and password from a Secret
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"
-    When I apply a Single "pg" with Postgres host "pg.example.com" port 5432 database "n8n" user "n8n" password from secret "pg-creds" key "password" schema "public" pool size 7
+    And a Secret "pg-user" exists with key "user" set to "n8n"
+    When I apply a Single "pg" with Postgres host "pg.example.com" port 5432 database "n8n" user from secret "pg-user" key "user" password from secret "pg-creds" key "password" schema "public" pool size 7
     Then the Deployment "pg" has env var "DB_TYPE" set to "postgresdb"
     And the Deployment "pg" has env var "DB_POSTGRESDB_HOST" set to "pg.example.com"
     And the Deployment "pg" has env var "DB_POSTGRESDB_PORT" set to "5432"
     And the Deployment "pg" has env var "DB_POSTGRESDB_DATABASE" set to "n8n"
-    And the Deployment "pg" has env var "DB_POSTGRESDB_USER" set to "n8n"
+    And the Deployment "pg" sources env var "DB_POSTGRESDB_USER" from secret "pg-user" key "user"
     And the Deployment "pg" has env var "DB_POSTGRESDB_SCHEMA" set to "public"
     And the Deployment "pg" has env var "DB_POSTGRESDB_POOL_SIZE" set to "7"
     And the Deployment "pg" sources env var "DB_POSTGRESDB_PASSWORD" from secret "pg-creds" key "password"
 
   Scenario: Postgres with SSL CA mounts the cert and points env var at the file
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "pg-user" exists with key "user" set to "n8n"
     And a Secret "pg-ca" exists with key "ca.crt" set to "fake-ca-pem"
-    When I apply a Single "pg-ssl" with Postgres host "pg.example.com" database "n8n" user "n8n" password from secret "pg-creds" key "password" and SSL CA from secret "pg-ca" key "ca.crt"
+    When I apply a Single "pg-ssl" with Postgres host "pg.example.com" database "n8n" user from secret "pg-user" key "user" password from secret "pg-creds" key "password" and SSL CA from secret "pg-ca" key "ca.crt"
     Then the Deployment "pg-ssl" has env var "DB_POSTGRESDB_SSL_ENABLED" set to "true"
     And the Deployment "pg-ssl" has env var "DB_POSTGRESDB_SSL_CA" set to "/etc/n8n/ssl/ca/ca.crt"
     And the Deployment "pg-ssl" mounts secret "pg-ca" at "/etc/n8n/ssl/ca/ca.crt"

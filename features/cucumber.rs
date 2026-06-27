@@ -766,7 +766,7 @@ async fn no_ingress(w: &mut E2eWorld, name: String) {
 
 #[allow(clippy::too_many_arguments)]
 #[when(
-    regex = r#"^I apply a Single "([^"]+)" with Postgres host "([^"]+)" port (\d+) database "([^"]+)" user "([^"]+)" password from secret "([^"]+)" key "([^"]+)" schema "([^"]+)" pool size (\d+)$"#
+    regex = r#"^I apply a Single "([^"]+)" with Postgres host "([^"]+)" port (\d+) database "([^"]+)" user from secret "([^"]+)" key "([^"]+)" password from secret "([^"]+)" key "([^"]+)" schema "([^"]+)" pool size (\d+)$"#
 )]
 async fn apply_postgres_full(
     w: &mut E2eWorld,
@@ -774,7 +774,8 @@ async fn apply_postgres_full(
     host: String,
     port: i32,
     database: String,
-    user: String,
+    user_secret: String,
+    user_key: String,
     secret: String,
     key: String,
     schema: String,
@@ -788,7 +789,10 @@ async fn apply_postgres_full(
             host,
             port: Some(port),
             database,
-            user,
+            user_secret: SecretKeyRef {
+                name: user_secret,
+                key: user_key,
+            },
             password_secret: SecretKeyRef { name: secret, key },
             schema: Some(schema),
             ssl: None,
@@ -802,14 +806,15 @@ async fn apply_postgres_full(
 
 #[allow(clippy::too_many_arguments)]
 #[when(
-    regex = r#"^I apply a Single "([^"]+)" with Postgres host "([^"]+)" database "([^"]+)" user "([^"]+)" password from secret "([^"]+)" key "([^"]+)" and SSL CA from secret "([^"]+)" key "([^"]+)"$"#
+    regex = r#"^I apply a Single "([^"]+)" with Postgres host "([^"]+)" database "([^"]+)" user from secret "([^"]+)" key "([^"]+)" password from secret "([^"]+)" key "([^"]+)" and SSL CA from secret "([^"]+)" key "([^"]+)"$"#
 )]
 async fn apply_postgres_ssl(
     w: &mut E2eWorld,
     name: String,
     host: String,
     database: String,
-    user: String,
+    user_secret: String,
+    user_key: String,
     pw_secret: String,
     pw_key: String,
     ca_secret: String,
@@ -823,7 +828,10 @@ async fn apply_postgres_ssl(
             host,
             port: None,
             database,
-            user,
+            user_secret: SecretKeyRef {
+                name: user_secret,
+                key: user_key,
+            },
             password_secret: SecretKeyRef {
                 name: pw_secret,
                 key: pw_key,
@@ -1117,7 +1125,10 @@ fn pg_postgres_config() -> PostgresConfig {
         host: "pg.example.com".into(),
         port: Some(5432),
         database: "n8n".into(),
-        user: "n8n".into(),
+        user_secret: SecretKeyRef {
+            name: "pg-creds".into(),
+            key: "user".into(),
+        },
         password_secret: SecretKeyRef {
             name: "pg-creds".into(),
             key: "password".into(),
