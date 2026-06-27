@@ -94,6 +94,14 @@ Feature: n8n operator reconciles Cluster custom resources
     And the Deployment "s3c-worker" has env var "N8N_DEFAULT_BINARY_DATA_MODE" set to "s3"
     And the Deployment "s3c-worker" sources env var "N8N_EXTERNAL_STORAGE_S3_ACCESS_SECRET" from secret "s3-creds" key "access_secret"
 
+  Scenario: communityNodes packages are managed declaratively on every role
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "cnodes" with community package "n8n-nodes-foo"
+    Then the Deployment "cnodes-main" has env var "N8N_COMMUNITY_PACKAGES_ENABLED" set to "true"
+    And the Deployment "cnodes-main" has env var "N8N_COMMUNITY_PACKAGES_MANAGED_BY_ENV" set to "true"
+    And the Deployment "cnodes-worker" has env var "N8N_COMMUNITY_PACKAGES_MANAGED_BY_ENV" set to "true"
+
   Scenario: Cluster status reports replica counts per role
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"
     And a Secret "redis-creds" exists with key "password" set to "rs3cret"

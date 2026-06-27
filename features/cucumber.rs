@@ -1096,6 +1096,7 @@ fn base_cluster_spec() -> ClusterSpec {
         binary_data: None,
         smtp: None,
         logging: None,
+        community_nodes: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1174,6 +1175,7 @@ async fn apply_cluster_full(
         binary_data: None,
         smtp: None,
         logging: None,
+        community_nodes: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1233,6 +1235,7 @@ async fn apply_cluster_with_main_pv(w: &mut E2eWorld, name: String, size: String
         binary_data: None,
         smtp: None,
         logging: None,
+        community_nodes: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1286,6 +1289,7 @@ async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
         binary_data: None,
         smtp: None,
         logging: None,
+        community_nodes: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1448,6 +1452,7 @@ async fn apply_cluster_byo_key(w: &mut E2eWorld, name: String, secret: String, k
         binary_data: None,
         smtp: None,
         logging: None,
+        community_nodes: None,
         image: "nginx:alpine".into(),
         encryption_key: Some(EncryptionKeySpec {
             secret_ref: Some(SecretKeyRef { name: secret, key }),
@@ -1495,6 +1500,7 @@ async fn apply_cluster_main_ingress(w: &mut E2eWorld, name: String, class: Strin
         binary_data: None,
         smtp: None,
         logging: None,
+        community_nodes: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1561,6 +1567,22 @@ async fn apply_cluster_s3(w: &mut E2eWorld, name: String, bucket: String) {
     apply_cluster(w, &name, spec).await;
 }
 
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with community package "([^"]+)"$"#)]
+async fn apply_cluster_community(w: &mut E2eWorld, name: String, pkg: String) {
+    let mut spec = base_cluster_spec();
+    spec.community_nodes = Some(n8n_rustful_operator::CommunityNodesConfig {
+        enabled: Some(true),
+        packages: vec![n8n_rustful_operator::CommunityPackage {
+            name: pkg,
+            version: None,
+            checksum: None,
+        }],
+        shared_storage: None,
+        reinstall_missing: None,
+    });
+    apply_cluster(w, &name, spec).await;
+}
+
 #[when(regex = r#"^I apply a Cluster "([^"]+)" with main image "([^"]+)" and worker image "([^"]+)"$"#)]
 async fn apply_cluster_image_overrides(
     w: &mut E2eWorld,
@@ -1575,6 +1597,7 @@ async fn apply_cluster_image_overrides(
         binary_data: None,
         smtp: None,
         logging: None,
+        community_nodes: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1621,6 +1644,7 @@ async fn apply_cluster_redis_prefix(w: &mut E2eWorld, name: String, prefix: Stri
         binary_data: None,
         smtp: None,
         logging: None,
+        community_nodes: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -1900,6 +1924,7 @@ async fn apply_cluster_main_route(
         binary_data: None,
         smtp: None,
         logging: None,
+        community_nodes: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {
@@ -2038,6 +2063,7 @@ async fn apply_cluster_hpa(w: &mut E2eWorld, name: String, min: i32, max: i32) {
         binary_data: None,
         smtp: None,
         logging: None,
+        community_nodes: None,
         image: "nginx:alpine".into(),
         encryption_key: None,
         database: DatabaseSpec {

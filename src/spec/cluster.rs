@@ -1,5 +1,6 @@
 use crate::spec::{
     common::{EncryptionKeySpec, EnvVar},
+    community::CommunityNodesConfig,
     database::DatabaseSpec,
     logging::LoggingConfig,
     redis::RedisConfig,
@@ -61,6 +62,9 @@ pub struct ClusterSpec {
     /// Logging, diagnostics and metrics toggles, shared by every role.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logging: Option<LoggingConfig>,
+    /// Community-node handling across roles (queue mode).
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "communityNodes")]
+    pub community_nodes: Option<CommunityNodesConfig>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug, JsonSchema)]

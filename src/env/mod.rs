@@ -1,3 +1,4 @@
+pub mod community;
 pub mod database;
 pub mod logging;
 pub mod redis;

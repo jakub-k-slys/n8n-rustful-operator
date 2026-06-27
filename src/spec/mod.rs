@@ -1,5 +1,6 @@
 pub mod cluster;
 pub mod common;
+pub mod community;
 pub mod database;
 pub mod logging;
 pub mod networking;
@@ -13,8 +14,9 @@ pub mod storage;
 pub use cluster::{CLUSTER_FINALIZER, Cluster, ClusterSpec, ClusterStatus};
 pub use common::{
     EncryptionKeySpec, EnvVar, EnvVarSource, PersistenceConfig, ResourceList, ResourceRequirements,
-    SecretKeyRef, ServiceConfig, default_service_type,
+    SecretKeyRef, ServiceConfig, SharedStorage, default_service_type,
 };
+pub use community::{CommunityNodesConfig, CommunityPackage};
 pub use database::{DatabaseSpec, DatabaseSsl, MysqlConfig, PostgresConfig, SqliteConfig};
 pub use logging::LoggingConfig;
 pub use networking::{GatewayRef, HttpRouteConfig, IngressConfig, NetworkingSpec};

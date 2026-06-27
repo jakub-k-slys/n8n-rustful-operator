@@ -615,6 +615,61 @@ spec:
                 required:
                 - mode
                 type: object
+              communityNodes:
+                description: Community-node handling across roles (queue mode).
+                nullable: true
+                properties:
+                  enabled:
+                    description: '`N8N_COMMUNITY_PACKAGES_ENABLED`. Omit for the n8n default (true).'
+                    nullable: true
+                    type: boolean
+                  packages:
+                    description: |-
+                      Declaratively managed package set. Sets `N8N_COMMUNITY_PACKAGES` and
+                      `N8N_COMMUNITY_PACKAGES_MANAGED_BY_ENV=true`, so every role reconciles to
+                      this exact list on startup and the UI install page becomes read-only.
+                    items:
+                      properties:
+                        checksum:
+                          nullable: true
+                          type: string
+                        name:
+                          description: npm package name, e.g. `n8n-nodes-foo`.
+                          type: string
+                        version:
+                          nullable: true
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                  reinstallMissing:
+                    description: |-
+                      `N8N_REINSTALL_MISSING_PACKAGES`. Legacy fallback (each pod reinstalls
+                      missing packages from the DB on boot) — discouraged by the n8n docs as it
+                      can slow startup, fail health checks, and double-load packages. Defaults
+                      to off; prefer `packages` or `sharedStorage`.
+                    nullable: true
+                    type: boolean
+                  sharedStorage:
+                    description: |-
+                      Shared `ReadWriteMany` volume mounted at `~/.n8n/nodes` on every role, so
+                      a UI install propagates. Mutually exclusive with `packages`.
+                    nullable: true
+                    properties:
+                      accessMode:
+                        default: ReadWriteMany
+                        type: string
+                      size:
+                        description: Storage request, e.g. `5Gi`.
+                        type: string
+                      storageClassName:
+                        nullable: true
+                        type: string
+                    required:
+                    - size
+                    type: object
+                type: object
               database:
                 description: Queue mode requires a shared DB; sqlite is rejected.
                 properties:

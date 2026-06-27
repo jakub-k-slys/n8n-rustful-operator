@@ -1,6 +1,6 @@
 use crate::{
     Error, Result,
-    spec::{Cluster, DatabaseSpec, EnvVar, SmtpConfig},
+    spec::{Cluster, CommunityNodesConfig, DatabaseSpec, EnvVar, SmtpConfig},
 };
 
 /// Env names (and prefixes) the operator wires itself; users may not shadow
@@ -39,6 +39,22 @@ pub fn validate_smtp(smtp: Option<&SmtpConfig>) -> Result<()> {
         && s.port == 0
     {
         return Err(Error::IllegalSmtp("smtp.port must be 1-65535".into()));
+    }
+    Ok(())
+}
+
+pub fn validate_community(cn: Option<&CommunityNodesConfig>) -> Result<()> {
+    if let Some(cn) = cn {
+        let active = [
+            !cn.packages.is_empty(),
+            cn.shared_storage.is_some(),
+            cn.reinstall_missing == Some(true),
+        ];
+        if active.iter().filter(|x| **x).count() > 1 {
+            return Err(Error::IllegalCluster(
+                "communityNodes: set at most one of packages, sharedStorage, reinstallMissing=true".into(),
+            ));
+        }
     }
     Ok(())
 }
@@ -102,6 +118,7 @@ pub fn validate_cluster(c: &Cluster) -> Result<()> {
         validate_extra_env(&wh.extra_env)?;
     }
     validate_smtp(c.spec.smtp.as_ref())?;
+    validate_community(c.spec.community_nodes.as_ref())?;
     if let Some(bd) = &c.spec.binary_data {
         if !matches!(bd.mode.as_str(), "filesystem" | "s3") {
             return Err(Error::IllegalCluster(format!(
