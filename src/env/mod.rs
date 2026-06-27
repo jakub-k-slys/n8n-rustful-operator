@@ -115,3 +115,26 @@ pub fn cluster_webhook_url(c: &Cluster) -> Option<EnvVar> {
     };
     host.map(|h| webhook_url_env(h, protocol_for(net)))
 }
+
+/// The operator-derived env defaults shared by a cluster role: the role's
+/// host-derived URLs, the cluster-wide SMTP / logging / community-node settings,
+/// and the cluster-wide webhook URL. Built immutably; pass to `build_user_env`
+/// where `extraEnv` can still override any entry.
+pub fn cluster_role_defaults(c: &Cluster, host: Option<&str>, net: Option<&NetworkingSpec>) -> Vec<EnvVar> {
+    [
+        host_env(host, protocol_for(net)),
+        c.spec.smtp.as_ref().map(smtp::build_smtp_env).unwrap_or_default(),
+        c.spec
+            .logging
+            .as_ref()
+            .map(logging::build_logging_env)
+            .unwrap_or_default(),
+        c.spec
+            .community_nodes
+            .as_ref()
+            .map(community::build_community_env)
+            .unwrap_or_default(),
+        cluster_webhook_url(c).into_iter().collect(),
+    ]
+    .concat()
+}

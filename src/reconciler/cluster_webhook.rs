@@ -5,10 +5,7 @@ use crate::{
         http_route::delete_http_route,
         service::build_cluster_service,
     },
-    env::{
-        build_user_env, cluster_webhook_url, community::build_community_env, env_str, host_env,
-        logging::build_logging_env, protocol_for, smtp::build_smtp_env,
-    },
+    env::{build_user_env, cluster_role_defaults, env_str},
     reconciler::{
         ctx::{ApplyCtx, Bundle},
         networking::{RoleNetworking, reconcile_role_networking},
@@ -33,27 +30,13 @@ pub async fn reconcile_webhooks(
         return Ok(());
     };
     let image = wh.image.clone().unwrap_or_else(|| c.spec.image.clone());
-    let mut env = bundle.env.clone();
-    env.push(env_str("N8N_DISABLE_PRODUCTION_MAIN_PROCESS", "true"));
-    let mut defaults = host_env(wh.host.as_deref(), protocol_for(wh.networking.as_ref()));
-    if let Some(s) = &c.spec.smtp {
-        defaults.extend(build_smtp_env(s));
-    }
-    if let Some(l) = &c.spec.logging {
-        defaults.extend(build_logging_env(l));
-    }
-    if let Some(cn) = &c.spec.community_nodes {
-        defaults.extend(build_community_env(cn));
-    }
-    if let Some(wu) = cluster_webhook_url(c) {
-        defaults.push(wu);
-    }
-    env.extend(build_user_env(
-        &defaults,
-        c.spec.secure_cookie,
-        &c.spec.extra_env,
-        &wh.extra_env,
-    ));
+    let defaults = cluster_role_defaults(c, wh.host.as_deref(), wh.networking.as_ref());
+    let env = [
+        bundle.env.clone(),
+        vec![env_str("N8N_DISABLE_PRODUCTION_MAIN_PROCESS", "true")],
+        build_user_env(&defaults, c.spec.secure_cookie, &c.spec.extra_env, &wh.extra_env),
+    ]
+    .concat();
     let dep = build_cluster_deployment(
         &DeploymentInputs {
             name: &name,
