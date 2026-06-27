@@ -110,6 +110,20 @@ Feature: n8n operator reconciles Cluster custom resources
     And the Deployment "binfs-main" mounts pvc "binfs-binary-data" at "/home/node/binary-data"
     And the Deployment "binfs-worker" mounts pvc "binfs-binary-data" at "/home/node/binary-data"
 
+  Scenario: multi-main enables the HA env and sticky sessions on main
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "mm" with multi-main and 2 main replicas
+    Then the Deployment "mm-main" has env var "N8N_MULTI_MAIN_SETUP_ENABLED" set to "true"
+    And the Deployment "mm-main" has 2 replicas
+    And the Service "mm-main" has session affinity "ClientIP"
+
+  Scenario: more than one main without multi-main is rejected
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "mm-bad" with 2 main replicas and no multi-main
+    Then the Cluster "mm-bad" never reaches status.ready=true within 20 seconds
+
   Scenario: communityNodes packages are managed declaratively on every role
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"
     And a Secret "redis-creds" exists with key "password" set to "rs3cret"

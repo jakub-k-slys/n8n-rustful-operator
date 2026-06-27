@@ -5,8 +5,8 @@ use crate::{
         service::build_cluster_service,
     },
     env::{
-        build_user_env, community::build_community_env, host_env, logging::build_logging_env, protocol_for,
-        smtp::build_smtp_env,
+        build_user_env, community::build_community_env, env_str, host_env, logging::build_logging_env,
+        protocol_for, smtp::build_smtp_env,
     },
     reconciler::{
         cluster_main_volumes::main_volumes,
@@ -26,8 +26,18 @@ pub async fn reconcile_main(
 ) -> Result<()> {
     let name = format!("{cluster_name}-main");
     let image = c.spec.main.image.clone().unwrap_or_else(|| c.spec.image.clone());
+    let multi_main = c.spec.main.multi_main == Some(true);
     let (vols, mounts) = main_volumes(c, &name, &image, ctx, bundle).await?;
     let mut env = bundle.env.clone();
+    if multi_main {
+        env.push(env_str("N8N_MULTI_MAIN_SETUP_ENABLED", "true"));
+        if let Some(ttl) = c.spec.main.multi_main_key_ttl {
+            env.push(env_str("N8N_MULTI_MAIN_SETUP_KEY_TTL", ttl.to_string()));
+        }
+        if let Some(iv) = c.spec.main.multi_main_check_interval {
+            env.push(env_str("N8N_MULTI_MAIN_SETUP_CHECK_INTERVAL", iv.to_string()));
+        }
+    }
     let mut defaults = host_env(
         c.spec.main.host.as_deref(),
         protocol_for(c.spec.main.networking.as_ref()),
@@ -76,6 +86,7 @@ pub async fn reconcile_main(
                 &image,
                 "main",
                 c.spec.main.service.as_ref(),
+                multi_main,
                 ctx.owner,
             )),
         )

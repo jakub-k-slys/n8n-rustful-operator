@@ -30,6 +30,23 @@ pub struct MainConfig {
     /// Pod-level scheduling and metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pod: Option<PodConfig>,
+    /// High-availability multi-main setup (`N8N_MULTI_MAIN_SETUP_ENABLED`).
+    /// Required (and validated) when `replicas` > 1, otherwise every main runs
+    /// the at-most-once tasks (timers/pollers/pruning) and duplicates them. The
+    /// main Service gets `ClientIP` session affinity. This is an n8n Enterprise
+    /// feature and needs a valid license to function.
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "multiMain")]
+    pub multi_main: Option<bool>,
+    /// `N8N_MULTI_MAIN_SETUP_KEY_TTL` — leader key TTL in seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "multiMainKeyTtl")]
+    pub multi_main_key_ttl: Option<u32>,
+    /// `N8N_MULTI_MAIN_SETUP_CHECK_INTERVAL` — leader check interval in seconds.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "multiMainCheckInterval"
+    )]
+    pub multi_main_check_interval: Option<u32>,
 }
 
 fn default_main_replicas() -> i32 {
