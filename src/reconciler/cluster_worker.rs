@@ -4,10 +4,7 @@ use crate::{
         cluster_deployment::{DeploymentInputs, build_cluster_deployment},
         hpa::build_worker_hpa,
     },
-    env::{
-        build_user_env, cluster_webhook_url, community::build_community_env, env_str,
-        logging::build_logging_env, smtp::build_smtp_env,
-    },
+    env::{build_user_env, cluster_role_defaults, env_str},
     reconciler::ctx::{ApplyCtx, Bundle},
     spec::Cluster,
 };
@@ -27,27 +24,24 @@ pub async fn reconcile_workers(
         .image
         .clone()
         .unwrap_or_else(|| c.spec.image.clone());
-    let mut env = bundle.env.clone();
-    if let Some(cc) = c.spec.workers.concurrency {
-        env.push(env_str("N8N_CONCURRENCY_PRODUCTION_LIMIT", cc.to_string()));
-    }
-    env.push(env_str("QUEUE_HEALTH_CHECK_ACTIVE", "true"));
-    let mut defaults = c.spec.smtp.as_ref().map(build_smtp_env).unwrap_or_default();
-    if let Some(l) = &c.spec.logging {
-        defaults.extend(build_logging_env(l));
-    }
-    if let Some(cn) = &c.spec.community_nodes {
-        defaults.extend(build_community_env(cn));
-    }
-    if let Some(wu) = cluster_webhook_url(c) {
-        defaults.push(wu);
-    }
-    env.extend(build_user_env(
-        &defaults,
-        c.spec.secure_cookie,
-        &c.spec.extra_env,
-        &c.spec.workers.extra_env,
-    ));
+    let defaults = cluster_role_defaults(c, None, None);
+    let env = [
+        bundle.env.clone(),
+        c.spec
+            .workers
+            .concurrency
+            .map(|cc| env_str("N8N_CONCURRENCY_PRODUCTION_LIMIT", cc.to_string()))
+            .into_iter()
+            .collect(),
+        vec![env_str("QUEUE_HEALTH_CHECK_ACTIVE", "true")],
+        build_user_env(
+            &defaults,
+            c.spec.secure_cookie,
+            &c.spec.extra_env,
+            &c.spec.workers.extra_env,
+        ),
+    ]
+    .concat();
     let replicas = if c.spec.workers.autoscaling.is_some() {
         None
     } else {

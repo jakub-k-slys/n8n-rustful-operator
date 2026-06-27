@@ -5,10 +5,7 @@ use crate::{
         destination_rule::{apply_destination_rule, delete_destination_rule},
         service::build_cluster_service,
     },
-    env::{
-        build_user_env, cluster_webhook_url, community::build_community_env, env_str, host_env,
-        logging::build_logging_env, protocol_for, smtp::build_smtp_env,
-    },
+    env::{build_user_env, cluster_role_defaults, env_str},
     reconciler::{
         cluster_main_volumes::main_volumes,
         ctx::{ApplyCtx, Bundle},
@@ -18,6 +15,28 @@ use crate::{
 };
 use k8s_openapi::api::{apps::v1::Deployment, core::v1::Service};
 use kube::api::Patch;
+use serde_json::Value;
+
+/// Multi-main HA env for the main role; empty unless multi-main is active.
+fn multi_main_env(c: &Cluster, enabled: bool) -> Vec<Value> {
+    if !enabled {
+        return Vec::new();
+    }
+    [
+        Some(env_str("N8N_MULTI_MAIN_SETUP_ENABLED", "true")),
+        c.spec
+            .main
+            .multi_main_key_ttl
+            .map(|ttl| env_str("N8N_MULTI_MAIN_SETUP_KEY_TTL", ttl.to_string())),
+        c.spec
+            .main
+            .multi_main_check_interval
+            .map(|iv| env_str("N8N_MULTI_MAIN_SETUP_CHECK_INTERVAL", iv.to_string())),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
+}
 
 pub async fn reconcile_main(
     c: &Cluster,
@@ -31,38 +50,18 @@ pub async fn reconcile_main(
     // main duplicates the at-most-once tasks. Auto-enable it.
     let multi_main = c.spec.main.replicas > 1;
     let (vols, mounts) = main_volumes(c, &name, &image, ctx, bundle).await?;
-    let mut env = bundle.env.clone();
-    if multi_main {
-        env.push(env_str("N8N_MULTI_MAIN_SETUP_ENABLED", "true"));
-        if let Some(ttl) = c.spec.main.multi_main_key_ttl {
-            env.push(env_str("N8N_MULTI_MAIN_SETUP_KEY_TTL", ttl.to_string()));
-        }
-        if let Some(iv) = c.spec.main.multi_main_check_interval {
-            env.push(env_str("N8N_MULTI_MAIN_SETUP_CHECK_INTERVAL", iv.to_string()));
-        }
-    }
-    let mut defaults = host_env(
-        c.spec.main.host.as_deref(),
-        protocol_for(c.spec.main.networking.as_ref()),
-    );
-    if let Some(s) = &c.spec.smtp {
-        defaults.extend(build_smtp_env(s));
-    }
-    if let Some(l) = &c.spec.logging {
-        defaults.extend(build_logging_env(l));
-    }
-    if let Some(cn) = &c.spec.community_nodes {
-        defaults.extend(build_community_env(cn));
-    }
-    if let Some(wu) = cluster_webhook_url(c) {
-        defaults.push(wu);
-    }
-    env.extend(build_user_env(
-        &defaults,
-        c.spec.secure_cookie,
-        &c.spec.extra_env,
-        &c.spec.main.extra_env,
-    ));
+    let defaults = cluster_role_defaults(c, c.spec.main.host.as_deref(), c.spec.main.networking.as_ref());
+    let env = [
+        bundle.env.clone(),
+        multi_main_env(c, multi_main),
+        build_user_env(
+            &defaults,
+            c.spec.secure_cookie,
+            &c.spec.extra_env,
+            &c.spec.main.extra_env,
+        ),
+    ]
+    .concat();
     let dep = build_cluster_deployment(
         &DeploymentInputs {
             name: &name,
