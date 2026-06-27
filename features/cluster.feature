@@ -94,6 +94,22 @@ Feature: n8n operator reconciles Cluster custom resources
     And the Deployment "s3c-worker" has env var "N8N_DEFAULT_BINARY_DATA_MODE" set to "s3"
     And the Deployment "s3c-worker" sources env var "N8N_EXTERNAL_STORAGE_S3_ACCESS_SECRET" from secret "s3-creds" key "access_secret"
 
+  Scenario: database binary-data mode is set on every role
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "bindb" with database binary data
+    Then the Deployment "bindb-main" has env var "N8N_DEFAULT_BINARY_DATA_MODE" set to "database"
+    And the Deployment "bindb-worker" has env var "N8N_DEFAULT_BINARY_DATA_MODE" set to "database"
+
+  Scenario: filesystem binary-data with a shared RWX volume is mounted on every role
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "binfs" with filesystem binary data shared size "1Gi"
+    Then a PersistentVolumeClaim named "binfs-binary-data" exists with size "1Gi"
+    And the Deployment "binfs-main" has env var "N8N_BINARY_DATA_STORAGE_PATH" set to "/home/node/binary-data"
+    And the Deployment "binfs-main" mounts pvc "binfs-binary-data" at "/home/node/binary-data"
+    And the Deployment "binfs-worker" mounts pvc "binfs-binary-data" at "/home/node/binary-data"
+
   Scenario: communityNodes packages are managed declaratively on every role
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"
     And a Secret "redis-creds" exists with key "password" set to "rs3cret"

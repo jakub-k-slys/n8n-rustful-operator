@@ -1550,6 +1550,7 @@ async fn apply_cluster_s3(w: &mut E2eWorld, name: String, bucket: String) {
     let mut spec = base_cluster_spec();
     spec.binary_data = Some(n8n_rustful_operator::BinaryDataSpec {
         mode: "s3".into(),
+        shared_storage: None,
         s3: Some(n8n_rustful_operator::S3Config {
             host: "minio.local".into(),
             bucket,
@@ -1562,6 +1563,32 @@ async fn apply_cluster_s3(w: &mut E2eWorld, name: String, bucket: String) {
                 name: "s3-creds".into(),
                 key: "access_secret".into(),
             },
+        }),
+    });
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with database binary data$"#)]
+async fn apply_cluster_db_binary(w: &mut E2eWorld, name: String) {
+    let mut spec = base_cluster_spec();
+    spec.binary_data = Some(n8n_rustful_operator::BinaryDataSpec {
+        mode: "database".into(),
+        s3: None,
+        shared_storage: None,
+    });
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with filesystem binary data shared size "([^"]+)"$"#)]
+async fn apply_cluster_fs_binary(w: &mut E2eWorld, name: String, size: String) {
+    let mut spec = base_cluster_spec();
+    spec.binary_data = Some(n8n_rustful_operator::BinaryDataSpec {
+        mode: "filesystem".into(),
+        s3: None,
+        shared_storage: Some(n8n_rustful_operator::SharedStorage {
+            size,
+            storage_class_name: None,
+            access_mode: "ReadWriteMany".into(),
         }),
     });
     apply_cluster(w, &name, spec).await;

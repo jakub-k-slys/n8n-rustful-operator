@@ -1,17 +1,23 @@
-use crate::spec::common::SecretKeyRef;
+use crate::spec::{common::SecretKeyRef, common::SharedStorage};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-/// Where n8n stores binary data (workflow attachments). In queue mode the
-/// default `filesystem` mode is per-pod, so binary produced on a worker is not
-/// visible to main; `s3` shares it across all roles.
+/// Where n8n stores binary data (workflow attachments). Maps to
+/// `N8N_DEFAULT_BINARY_DATA_MODE`. In queue mode only `database`, `s3`, or
+/// `filesystem` backed by a shared `ReadWriteMany` volume are shared across
+/// roles — `default` (in-memory) and an unshared `filesystem` are per-pod.
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
 pub struct BinaryDataSpec {
-    /// `filesystem` (default) or `s3`. Maps to `N8N_DEFAULT_BINARY_DATA_MODE`.
+    /// `default` (in-memory), `database` (in the DB), `filesystem`, or `s3`.
     pub mode: String,
     /// External S3-compatible storage; required when `mode` is `s3`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub s3: Option<S3Config>,
+    /// Shared `ReadWriteMany` volume for `mode: filesystem`, mounted on every
+    /// role at the binary-data path (`N8N_BINARY_DATA_STORAGE_PATH`) so files are
+    /// shared across roles in queue mode. Only valid with `mode: filesystem`.
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "sharedStorage")]
+    pub shared_storage: Option<SharedStorage>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]

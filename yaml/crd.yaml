@@ -570,7 +570,7 @@ spec:
                 nullable: true
                 properties:
                   mode:
-                    description: '`filesystem` (default) or `s3`. Maps to `N8N_DEFAULT_BINARY_DATA_MODE`.'
+                    description: '`default` (in-memory), `database` (in the DB), `filesystem`, or `s3`.'
                     type: string
                   s3:
                     description: External S3-compatible storage; required when `mode` is `s3`.
@@ -611,6 +611,25 @@ spec:
                     - bucket
                     - bucketRegion
                     - host
+                    type: object
+                  sharedStorage:
+                    description: |-
+                      Shared `ReadWriteMany` volume for `mode: filesystem`, mounted on every
+                      role at the binary-data path (`N8N_BINARY_DATA_STORAGE_PATH`) so files are
+                      shared across roles in queue mode. Only valid with `mode: filesystem`.
+                    nullable: true
+                    properties:
+                      accessMode:
+                        default: ReadWriteMany
+                        type: string
+                      size:
+                        description: Storage request, e.g. `5Gi`.
+                        type: string
+                      storageClassName:
+                        nullable: true
+                        type: string
+                    required:
+                    - size
                     type: object
                 required:
                 - mode
