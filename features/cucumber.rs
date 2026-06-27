@@ -961,30 +961,48 @@ async fn pvc_exists(w: &mut E2eWorld, name: String, size: String) {
 
 #[then(regex = r#"^the Deployment "([^"]+)" mounts pvc "([^"]+)" at "([^"]+)"$"#)]
 async fn deployment_mounts_pvc(w: &mut E2eWorld, name: String, pvc: String, path: String) {
-    let api: Api<Deployment> = Api::namespaced(w.client().clone(), NS);
-    let dep = api.get(&name).await.expect("Deployment");
-    let pod_spec = dep.spec.and_then(|s| s.template.spec).expect("pod spec");
-    let vol = pod_spec
-        .volumes
-        .unwrap_or_default()
-        .into_iter()
-        .find(|v| {
-            v.persistent_volume_claim
-                .as_ref()
-                .map(|p| p.claim_name == pvc)
-                .unwrap_or(false)
-        })
-        .unwrap_or_else(|| panic!("no PVC volume claiming {pvc}"));
-    let containers = pod_spec.containers;
-    let mounts = containers
-        .first()
-        .and_then(|c| c.volume_mounts.clone())
-        .unwrap_or_default();
-    let mount = mounts
-        .into_iter()
-        .find(|m| m.name == vol.name)
-        .unwrap_or_else(|| panic!("no mount for volume {}", vol.name));
-    assert_eq!(mount.mount_path, path);
+    let client = w.client().clone();
+    let d = name.clone();
+    let p = pvc.clone();
+    let mp = path.clone();
+    wait_until(
+        60,
+        &format!("Deployment/{name} mounts pvc {pvc} at {path}"),
+        move || {
+            let client = client.clone();
+            let d = d.clone();
+            let p = p.clone();
+            let mp = mp.clone();
+            async move {
+                let api: Api<Deployment> = Api::namespaced(client, NS);
+                let Some(pod_spec) = api
+                    .get_opt(&d)
+                    .await
+                    .unwrap()
+                    .and_then(|dep| dep.spec)
+                    .and_then(|s| s.template.spec)
+                else {
+                    return false;
+                };
+                let Some(vol) = pod_spec.volumes.unwrap_or_default().into_iter().find(|v| {
+                    v.persistent_volume_claim
+                        .as_ref()
+                        .map(|c| c.claim_name == p)
+                        .unwrap_or(false)
+                }) else {
+                    return false;
+                };
+                pod_spec
+                    .containers
+                    .first()
+                    .and_then(|c| c.volume_mounts.clone())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .any(|m| m.name == vol.name && m.mount_path == mp)
+            }
+        },
+    )
+    .await;
 }
 
 #[then(regex = r#"^the Deployment "([^"]+)" mounts secret "([^"]+)" at "([^"]+)"$"#)]
