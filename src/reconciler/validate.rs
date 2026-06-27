@@ -120,15 +120,20 @@ pub fn validate_cluster(c: &Cluster) -> Result<()> {
     validate_smtp(c.spec.smtp.as_ref())?;
     validate_community(c.spec.community_nodes.as_ref())?;
     if let Some(bd) = &c.spec.binary_data {
-        if !matches!(bd.mode.as_str(), "filesystem" | "s3") {
+        if !matches!(bd.mode.as_str(), "default" | "database" | "filesystem" | "s3") {
             return Err(Error::IllegalCluster(format!(
-                "unknown binaryData.mode {:?} (want filesystem or s3)",
+                "unknown binaryData.mode {:?} (want default, database, filesystem or s3)",
                 bd.mode
             )));
         }
         if bd.mode == "s3" && bd.s3.is_none() {
             return Err(Error::IllegalCluster(
                 "binaryData.mode=s3 requires .binaryData.s3".into(),
+            ));
+        }
+        if bd.shared_storage.is_some() && bd.mode != "filesystem" {
+            return Err(Error::IllegalCluster(
+                "binaryData.sharedStorage is only valid with mode=filesystem".into(),
             ));
         }
     }

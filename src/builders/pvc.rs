@@ -21,6 +21,20 @@ pub fn build_nodes_volume(pvc_name: &str) -> (Value, Value) {
     )
 }
 
+/// Mount path for the shared binary-data volume; also the value set for
+/// `N8N_BINARY_DATA_STORAGE_PATH` so n8n writes binary data there. Kept outside
+/// `~/.n8n` to avoid nesting under a role's own persistence mount.
+pub const BINARY_DATA_STORAGE_PATH: &str = "/home/node/binary-data";
+
+/// Volume + mount for the shared binary-data PVC (`mode: filesystem`), mounted
+/// at [`BINARY_DATA_STORAGE_PATH`] on every role.
+pub fn build_binary_data_volume(pvc_name: &str) -> (Value, Value) {
+    (
+        json!({ "name": "n8n-binary-data", "persistentVolumeClaim": { "claimName": pvc_name } }),
+        json!({ "name": "n8n-binary-data", "mountPath": BINARY_DATA_STORAGE_PATH }),
+    )
+}
+
 /// A shared (typically ReadWriteMany) PVC, e.g. for community nodes across roles.
 pub fn build_shared_pvc(
     pvc_name: &str,

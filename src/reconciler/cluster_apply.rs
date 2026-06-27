@@ -1,7 +1,7 @@
 use crate::{
     Error, Result,
     builders::{
-        pvc::{build_nodes_volume, build_shared_pvc},
+        pvc::{build_binary_data_volume, build_nodes_volume, build_shared_pvc},
         volumes::build_db_volumes,
     },
     env::redis::build_cluster_common_env,
@@ -69,6 +69,24 @@ pub async fn apply(c: &Cluster, ctx: Arc<Context>) -> Result<Action> {
             .await
             .map_err(Error::KubeError)?;
         let (v, m) = build_nodes_volume(&pvc_name);
+        volumes.push(v);
+        mounts.push(m);
+    }
+    // Shared RWX binary-data volume on every role (filesystem mode with sharedStorage).
+    if let Some(storage) = c
+        .spec
+        .binary_data
+        .as_ref()
+        .filter(|bd| bd.mode == "filesystem")
+        .and_then(|bd| bd.shared_storage.as_ref())
+    {
+        let pvc_name = format!("{name}-binary-data");
+        let pvc = build_shared_pvc(&pvc_name, &name, &c.spec.image, storage, &owner);
+        actx.api::<PersistentVolumeClaim>()
+            .patch(&pvc_name, &patch, &Patch::Apply(&pvc))
+            .await
+            .map_err(Error::KubeError)?;
+        let (v, m) = build_binary_data_volume(&pvc_name);
         volumes.push(v);
         mounts.push(m);
     }
