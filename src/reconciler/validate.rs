@@ -1,6 +1,6 @@
 use crate::{
     Error, Result,
-    spec::{Cluster, CommunityNodesConfig, DatabaseSpec, EnvVar, SmtpConfig},
+    spec::{BinaryDataSpec, Cluster, CommunityNodesConfig, DatabaseSpec, EnvVar, SmtpConfig},
 };
 
 /// Env names (and prefixes) the operator wires itself; users may not shadow
@@ -120,7 +120,12 @@ pub fn validate_cluster(c: &Cluster) -> Result<()> {
     }
     validate_smtp(c.spec.smtp.as_ref())?;
     validate_community(c.spec.community_nodes.as_ref())?;
-    if let Some(bd) = &c.spec.binary_data {
+    validate_binary_data(c.spec.binary_data.as_ref())?;
+    Ok(())
+}
+
+pub fn validate_binary_data(bd: Option<&BinaryDataSpec>) -> Result<()> {
+    if let Some(bd) = bd {
         if !matches!(bd.mode.as_str(), "default" | "database" | "filesystem" | "s3") {
             return Err(Error::IllegalCluster(format!(
                 "unknown binaryData.mode {:?} (want default, database, filesystem or s3)",

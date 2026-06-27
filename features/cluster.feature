@@ -117,6 +117,21 @@ Feature: n8n operator reconciles Cluster custom resources
     Then the Deployment "mm-main" has env var "N8N_MULTI_MAIN_SETUP_ENABLED" set to "true"
     And the Deployment "mm-main" has 2 replicas
     And the Service "mm-main" has session affinity "ClientIP"
+    And a DestinationRule named "mm-main" exists within 60 seconds
+
+  Scenario: multi-main leader key TTL is wired onto main
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "mmt" with 2 main replicas and leader key ttl 20
+    Then the Deployment "mmt-main" has env var "N8N_MULTI_MAIN_SETUP_KEY_TTL" set to "20"
+
+  Scenario: scaling main back to one removes the DestinationRule
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "mmgc" with 2 main replicas
+    Then a DestinationRule named "mmgc-main" exists within 60 seconds
+    When I update the Cluster "mmgc" to 1 main replicas
+    Then a DestinationRule named "mmgc-main" is gone within 60 seconds
 
   Scenario: WEBHOOK_URL defaults to the main host without webhook processors
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"
@@ -132,6 +147,22 @@ Feature: n8n operator reconciles Cluster custom resources
     Then the Deployment "wu-wh-main" has env var "WEBHOOK_URL" set to "http://hooks.example.com/"
     And the Deployment "wu-wh-worker" has env var "WEBHOOK_URL" set to "http://hooks.example.com/"
     And the Deployment "wu-wh-webhook" has env var "WEBHOOK_URL" set to "http://hooks.example.com/"
+
+  Scenario: communityNodes sharedStorage mounts a shared volume on every role
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "cnvol" with community nodes shared size "1Gi"
+    Then a PersistentVolumeClaim named "cnvol-nodes" exists with size "1Gi"
+    And the Deployment "cnvol-main" mounts pvc "cnvol-nodes" at "/home/node/.n8n/nodes"
+    And the Deployment "cnvol-worker" mounts pvc "cnvol-nodes" at "/home/node/.n8n/nodes"
+
+  Scenario: cluster-wide imagePullSecrets, resources and smtp apply to the main role
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "blocks" with image pull secret "ghcr-secret", main resources and smtp
+    Then the Deployment "blocks-main" has imagePullSecret "ghcr-secret"
+    And the Deployment "blocks-main" requests cpu "200m" and limits memory "1Gi"
+    And the Deployment "blocks-main" has env var "N8N_EMAIL_MODE" set to "smtp"
 
   Scenario: communityNodes packages are managed declaratively on every role
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"

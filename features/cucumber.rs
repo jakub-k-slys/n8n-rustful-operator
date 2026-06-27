@@ -1654,6 +1654,27 @@ async fn apply_cluster_main_replicas(w: &mut E2eWorld, name: String, replicas: i
     apply_cluster(w, &name, spec).await;
 }
 
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with (\d+) main replicas and leader key ttl (\d+)$"#)]
+async fn apply_cluster_main_replicas_ttl(w: &mut E2eWorld, name: String, replicas: i32, ttl: u32) {
+    let mut spec = base_cluster_spec();
+    spec.main.replicas = replicas;
+    spec.main.multi_main_key_ttl = Some(ttl);
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I update the Cluster "([^"]+)" to (\d+) main replicas$"#)]
+async fn update_cluster_main_replicas(w: &mut E2eWorld, name: String, replicas: i32) {
+    let api: Api<Cluster> = Api::namespaced(w.client().clone(), NS);
+    let current = api.get(&name).await.expect("Cluster");
+    let mut spec = current.spec.clone();
+    spec.main.replicas = replicas;
+    let new = Cluster::new(&name, spec);
+    let ssa = PatchParams::apply("cucumber").force();
+    api.patch(&name, &ssa, &Patch::Apply(&new))
+        .await
+        .expect("update Cluster");
+}
+
 #[when(regex = r#"^I apply a Cluster "([^"]+)" with main host "([^"]+)"$"#)]
 async fn apply_cluster_main_host(w: &mut E2eWorld, name: String, host: String) {
     let mut spec = base_cluster_spec();
@@ -1695,6 +1716,56 @@ async fn apply_cluster_community(w: &mut E2eWorld, name: String, pkg: String) {
         }],
         shared_storage: None,
         reinstall_missing: None,
+    });
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with community nodes shared size "([^"]+)"$"#)]
+async fn apply_cluster_community_shared(w: &mut E2eWorld, name: String, size: String) {
+    let mut spec = base_cluster_spec();
+    spec.community_nodes = Some(n8n_rustful_operator::CommunityNodesConfig {
+        enabled: Some(true),
+        packages: vec![],
+        shared_storage: Some(n8n_rustful_operator::SharedStorage {
+            size,
+            storage_class_name: None,
+            access_mode: "ReadWriteMany".into(),
+        }),
+        reinstall_missing: None,
+    });
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with image pull secret "([^"]+)", main resources and smtp$"#)]
+async fn apply_cluster_role_blocks(w: &mut E2eWorld, name: String, pull_secret: String) {
+    let mut spec = base_cluster_spec();
+    spec.image_pull_secrets = vec![pull_secret];
+    spec.main.resources = Some(n8n_rustful_operator::ResourceRequirements {
+        requests: Some(n8n_rustful_operator::ResourceList {
+            cpu: Some("200m".into()),
+            memory: None,
+        }),
+        limits: Some(n8n_rustful_operator::ResourceList {
+            cpu: None,
+            memory: Some("1Gi".into()),
+        }),
+    });
+    spec.smtp = Some(n8n_rustful_operator::SmtpConfig {
+        host: "smtp.example.com".into(),
+        port: 587,
+        sender: "n8n@example.com".into(),
+        ssl: Some(false),
+        start_tls: Some(true),
+        auth: Some(n8n_rustful_operator::SmtpAuth {
+            user_secret: n8n_rustful_operator::SecretKeyRef {
+                name: "smtp".into(),
+                key: "user".into(),
+            },
+            password_secret: n8n_rustful_operator::SecretKeyRef {
+                name: "smtp".into(),
+                key: "password".into(),
+            },
+        }),
     });
     apply_cluster(w, &name, spec).await;
 }
@@ -1941,6 +2012,36 @@ fn http_route_api(client: Client) -> Api<DynamicObject> {
     let gvk = GroupVersionKind::gvk("gateway.networking.k8s.io", "v1", "HTTPRoute");
     let ar = ApiResource::from_gvk(&gvk);
     Api::namespaced_with(client, NS, &ar)
+}
+
+fn destination_rule_api(client: Client) -> Api<DynamicObject> {
+    let gvk = GroupVersionKind::gvk("networking.istio.io", "v1", "DestinationRule");
+    let ar = ApiResource::from_gvk(&gvk);
+    Api::namespaced_with(client, NS, &ar)
+}
+
+#[then(regex = r#"^a DestinationRule named "([^"]+)" exists within (\d+) seconds$"#)]
+async fn destination_rule_exists(w: &mut E2eWorld, name: String, secs: u64) {
+    let client = w.client().clone();
+    let n = name.clone();
+    wait_until(secs, &format!("DestinationRule/{name} to appear"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        async move { destination_rule_api(client).get_opt(&n).await.unwrap().is_some() }
+    })
+    .await;
+}
+
+#[then(regex = r#"^a DestinationRule named "([^"]+)" is gone within (\d+) seconds$"#)]
+async fn destination_rule_gone(w: &mut E2eWorld, name: String, secs: u64) {
+    let client = w.client().clone();
+    let n = name.clone();
+    wait_until(secs, &format!("DestinationRule/{name} gone"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        async move { destination_rule_api(client).get_opt(&n).await.unwrap().is_none() }
+    })
+    .await;
 }
 
 #[when(
