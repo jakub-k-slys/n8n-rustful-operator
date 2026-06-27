@@ -188,13 +188,23 @@ spec:
                             nullable: true
                             type: boolean
                         type: object
-                      user:
-                        type: string
+                      userSecret:
+                        description: DB user, sourced from a Secret (plaintext is not supported).
+                        properties:
+                          key:
+                            default: encryption_key
+                            description: Key within the Secret. Defaults to `encryption_key`.
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
                     required:
                     - database
                     - host
                     - passwordSecret
-                    - user
+                    - userSecret
                     type: object
                   sqlite:
                     nullable: true
@@ -854,13 +864,23 @@ spec:
                             nullable: true
                             type: boolean
                         type: object
-                      user:
-                        type: string
+                      userSecret:
+                        description: DB user, sourced from a Secret (plaintext is not supported).
+                        properties:
+                          key:
+                            default: encryption_key
+                            description: Key within the Secret. Defaults to `encryption_key`.
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
                     required:
                     - database
                     - host
                     - passwordSecret
-                    - user
+                    - userSecret
                     type: object
                   sqlite:
                     nullable: true
