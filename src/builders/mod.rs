@@ -1,5 +1,6 @@
 pub mod cluster_deployment;
 pub mod deployment;
+pub mod destination_rule;
 pub mod hpa;
 pub mod http_route;
 pub mod ingress;
