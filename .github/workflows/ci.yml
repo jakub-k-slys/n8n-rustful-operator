@@ -91,6 +91,12 @@ jobs:
   audit:
     name: Dependency security audit
     runs-on: ubuntu-latest
+    # rustsec/audit-check creates a check run to surface advisories; that needs
+    # checks:write, otherwise it fails with "Resource not accessible by
+    # integration" as soon as there's any finding (e.g. an unmaintained warning).
+    permissions:
+      contents: read
+      checks: write
     steps:
       - name: Check out source
         uses: actions/checkout@v7
