@@ -5,8 +5,8 @@ use crate::{
         service::build_cluster_service,
     },
     env::{
-        build_user_env, community::build_community_env, env_str, host_env, logging::build_logging_env,
-        protocol_for, smtp::build_smtp_env,
+        build_user_env, cluster_webhook_url, community::build_community_env, env_str, host_env,
+        logging::build_logging_env, protocol_for, smtp::build_smtp_env,
     },
     reconciler::{
         cluster_main_volumes::main_volumes,
@@ -52,6 +52,9 @@ pub async fn reconcile_main(
     }
     if let Some(cn) = &c.spec.community_nodes {
         defaults.extend(build_community_env(cn));
+    }
+    if let Some(wu) = cluster_webhook_url(c) {
+        defaults.push(wu);
     }
     env.extend(build_user_env(
         &defaults,

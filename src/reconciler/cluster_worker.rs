@@ -5,8 +5,8 @@ use crate::{
         hpa::build_worker_hpa,
     },
     env::{
-        build_user_env, community::build_community_env, env_str, logging::build_logging_env,
-        smtp::build_smtp_env,
+        build_user_env, cluster_webhook_url, community::build_community_env, env_str,
+        logging::build_logging_env, smtp::build_smtp_env,
     },
     reconciler::ctx::{ApplyCtx, Bundle},
     spec::Cluster,
@@ -38,6 +38,9 @@ pub async fn reconcile_workers(
     }
     if let Some(cn) = &c.spec.community_nodes {
         defaults.extend(build_community_env(cn));
+    }
+    if let Some(wu) = cluster_webhook_url(c) {
+        defaults.push(wu);
     }
     env.extend(build_user_env(
         &defaults,

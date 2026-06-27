@@ -5,7 +5,7 @@ pub mod redis;
 pub mod smtp;
 pub mod storage;
 
-use crate::spec::{EnvVar, NetworkingSpec, SecretKeyRef};
+use crate::spec::{Cluster, EnvVar, NetworkingSpec, SecretKeyRef};
 use serde_json::{Value, json};
 
 pub fn env_str(name: &str, value: impl Into<Value>) -> Value {
@@ -90,7 +90,28 @@ pub fn host_env(host: Option<&str>, protocol: &str) -> Vec<EnvVar> {
     vec![
         var("N8N_HOST", h.to_string()),
         var("N8N_PROTOCOL", protocol.to_string()),
-        var("WEBHOOK_URL", format!("{base}/")),
         var("N8N_EDITOR_BASE_URL", base),
     ]
+}
+
+/// `WEBHOOK_URL` for a host (`protocol://host/`). Unlike the per-role host vars,
+/// this is the externally-reachable webhook base and must be the same on every
+/// role so the URLs n8n registers and displays all agree.
+pub fn webhook_url_env(host: &str, protocol: &str) -> EnvVar {
+    EnvVar {
+        name: "WEBHOOK_URL".to_string(),
+        value: Some(format!("{protocol}://{host}/")),
+        value_from: None,
+    }
+}
+
+/// Cluster-wide `WEBHOOK_URL`: the dedicated webhook role's host when it has
+/// one, otherwise the main host. Applied to all roles. `None` when neither host
+/// is set.
+pub fn cluster_webhook_url(c: &Cluster) -> Option<EnvVar> {
+    let (host, net) = match c.spec.webhooks.as_ref().filter(|w| w.host.is_some()) {
+        Some(w) => (w.host.as_deref(), w.networking.as_ref()),
+        None => (c.spec.main.host.as_deref(), c.spec.main.networking.as_ref()),
+    };
+    host.map(|h| webhook_url_env(h, protocol_for(net)))
 }

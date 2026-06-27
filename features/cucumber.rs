@@ -1654,6 +1654,35 @@ async fn apply_cluster_main_replicas(w: &mut E2eWorld, name: String, replicas: i
     apply_cluster(w, &name, spec).await;
 }
 
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with main host "([^"]+)"$"#)]
+async fn apply_cluster_main_host(w: &mut E2eWorld, name: String, host: String) {
+    let mut spec = base_cluster_spec();
+    spec.main.host = Some(host);
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with main host "([^"]+)" and webhook host "([^"]+)"$"#)]
+async fn apply_cluster_main_and_webhook_host(
+    w: &mut E2eWorld,
+    name: String,
+    main_host: String,
+    wh_host: String,
+) {
+    let mut spec = base_cluster_spec();
+    spec.main.host = Some(main_host);
+    spec.webhooks = Some(n8n_rustful_operator::WebhookConfig {
+        replicas: 1,
+        image: None,
+        host: Some(wh_host),
+        service: None,
+        networking: None,
+        extra_env: vec![],
+        resources: None,
+        pod: None,
+    });
+    apply_cluster(w, &name, spec).await;
+}
+
 #[when(regex = r#"^I apply a Cluster "([^"]+)" with community package "([^"]+)"$"#)]
 async fn apply_cluster_community(w: &mut E2eWorld, name: String, pkg: String) {
     let mut spec = base_cluster_spec();
