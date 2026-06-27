@@ -2,6 +2,7 @@ use crate::{
     Error, Result,
     builders::{
         cluster_deployment::{DeploymentInputs, build_cluster_deployment},
+        destination_rule::{apply_destination_rule, delete_destination_rule},
         service::build_cluster_service,
     },
     env::{
@@ -97,6 +98,13 @@ pub async fn reconcile_main(
         )
         .await
         .map_err(Error::KubeError)?;
+    // Sticky sessions for multi-main behind Istio (Service sessionAffinity is
+    // bypassed by Envoy). Both calls are no-ops when the Istio CRDs aren't served.
+    if multi_main {
+        apply_destination_rule(&name, &image, ctx).await?;
+    } else {
+        delete_destination_rule(ctx.client, ctx.ns, &name).await?;
+    }
     reconcile_role_networking(
         &RoleNetworking {
             name: &name,
