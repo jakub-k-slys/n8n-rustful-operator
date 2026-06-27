@@ -118,6 +118,21 @@ Feature: n8n operator reconciles Cluster custom resources
     And the Deployment "mm-main" has 2 replicas
     And the Service "mm-main" has session affinity "ClientIP"
 
+  Scenario: WEBHOOK_URL defaults to the main host without webhook processors
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "wu-main" with main host "n8n.example.com"
+    Then the Deployment "wu-main-main" has env var "WEBHOOK_URL" set to "http://n8n.example.com/"
+    And the Deployment "wu-main-worker" has env var "WEBHOOK_URL" set to "http://n8n.example.com/"
+
+  Scenario: WEBHOOK_URL uses the webhook host when webhook processors are configured
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "wu-wh" with main host "n8n.example.com" and webhook host "hooks.example.com"
+    Then the Deployment "wu-wh-main" has env var "WEBHOOK_URL" set to "http://hooks.example.com/"
+    And the Deployment "wu-wh-worker" has env var "WEBHOOK_URL" set to "http://hooks.example.com/"
+    And the Deployment "wu-wh-webhook" has env var "WEBHOOK_URL" set to "http://hooks.example.com/"
+
   Scenario: communityNodes packages are managed declaratively on every role
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"
     And a Secret "redis-creds" exists with key "password" set to "rs3cret"

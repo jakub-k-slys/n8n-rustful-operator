@@ -91,14 +91,16 @@ fn role_value_from_overrides_cluster_value() {
 
 #[test]
 fn host_env_derives_url_vars() {
-    use n8n_rustful_operator::env::host_env;
+    use n8n_rustful_operator::env::{host_env, webhook_url_env};
+    let mut defaults = host_env(Some("n8n.example.com"), "https");
+    defaults.push(webhook_url_env("n8n.example.com", "https"));
     assert_eq!(
-        build_user_env(&host_env(Some("n8n.example.com"), "https"), None, &[], &[]),
+        build_user_env(&defaults, None, &[], &[]),
         vec![
             json!({ "name": "N8N_HOST", "value": "n8n.example.com" }),
             json!({ "name": "N8N_PROTOCOL", "value": "https" }),
-            json!({ "name": "WEBHOOK_URL", "value": "https://n8n.example.com/" }),
             json!({ "name": "N8N_EDITOR_BASE_URL", "value": "https://n8n.example.com" }),
+            json!({ "name": "WEBHOOK_URL", "value": "https://n8n.example.com/" }),
         ]
     );
 }

@@ -5,7 +5,7 @@ use crate::{
     },
     env::{
         build_user_env, database::build_db_env, host_env, logging::build_logging_env, protocol_for,
-        smtp::build_smtp_env,
+        smtp::build_smtp_env, webhook_url_env,
     },
     labels::{common_annotations, common_labels, selector_labels},
     spec::{SecretKeyRef, SingleSpec},
@@ -40,7 +40,11 @@ pub fn build_deployment(
         volumes.push(v);
         mounts.push(m);
     }
-    let mut defaults = host_env(spec.host.as_deref(), protocol_for(spec.networking.as_ref()));
+    let proto = protocol_for(spec.networking.as_ref());
+    let mut defaults = host_env(spec.host.as_deref(), proto);
+    if let Some(h) = &spec.host {
+        defaults.push(webhook_url_env(h, proto));
+    }
     if let Some(s) = &spec.smtp {
         defaults.extend(build_smtp_env(s));
     }
