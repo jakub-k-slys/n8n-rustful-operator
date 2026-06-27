@@ -119,6 +119,20 @@ Feature: n8n operator reconciles Cluster custom resources
     And the Service "mm-main" has session affinity "ClientIP"
     And a DestinationRule named "mm-main" exists within 60 seconds
 
+  Scenario: multi-main leader key TTL is wired onto main
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "mmt" with 2 main replicas and leader key ttl 20
+    Then the Deployment "mmt-main" has env var "N8N_MULTI_MAIN_SETUP_KEY_TTL" set to "20"
+
+  Scenario: scaling main back to one removes the DestinationRule
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "mmgc" with 2 main replicas
+    Then a DestinationRule named "mmgc-main" exists within 60 seconds
+    When I update the Cluster "mmgc" to 1 main replicas
+    Then a DestinationRule named "mmgc-main" is gone within 60 seconds
+
   Scenario: WEBHOOK_URL defaults to the main host without webhook processors
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"
     And a Secret "redis-creds" exists with key "password" set to "rs3cret"

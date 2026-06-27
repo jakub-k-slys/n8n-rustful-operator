@@ -1654,6 +1654,27 @@ async fn apply_cluster_main_replicas(w: &mut E2eWorld, name: String, replicas: i
     apply_cluster(w, &name, spec).await;
 }
 
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with (\d+) main replicas and leader key ttl (\d+)$"#)]
+async fn apply_cluster_main_replicas_ttl(w: &mut E2eWorld, name: String, replicas: i32, ttl: u32) {
+    let mut spec = base_cluster_spec();
+    spec.main.replicas = replicas;
+    spec.main.multi_main_key_ttl = Some(ttl);
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I update the Cluster "([^"]+)" to (\d+) main replicas$"#)]
+async fn update_cluster_main_replicas(w: &mut E2eWorld, name: String, replicas: i32) {
+    let api: Api<Cluster> = Api::namespaced(w.client().clone(), NS);
+    let current = api.get(&name).await.expect("Cluster");
+    let mut spec = current.spec.clone();
+    spec.main.replicas = replicas;
+    let new = Cluster::new(&name, spec);
+    let ssa = PatchParams::apply("cucumber").force();
+    api.patch(&name, &ssa, &Patch::Apply(&new))
+        .await
+        .expect("update Cluster");
+}
+
 #[when(regex = r#"^I apply a Cluster "([^"]+)" with main host "([^"]+)"$"#)]
 async fn apply_cluster_main_host(w: &mut E2eWorld, name: String, host: String) {
     let mut spec = base_cluster_spec();
@@ -2007,6 +2028,18 @@ async fn destination_rule_exists(w: &mut E2eWorld, name: String, secs: u64) {
         let client = client.clone();
         let n = n.clone();
         async move { destination_rule_api(client).get_opt(&n).await.unwrap().is_some() }
+    })
+    .await;
+}
+
+#[then(regex = r#"^a DestinationRule named "([^"]+)" is gone within (\d+) seconds$"#)]
+async fn destination_rule_gone(w: &mut E2eWorld, name: String, secs: u64) {
+    let client = w.client().clone();
+    let n = name.clone();
+    wait_until(secs, &format!("DestinationRule/{name} gone"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        async move { destination_rule_api(client).get_opt(&n).await.unwrap().is_none() }
     })
     .await;
 }
