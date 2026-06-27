@@ -1,6 +1,9 @@
 use crate::{
     Error, Result,
-    builders::volumes::build_db_volumes,
+    builders::{
+        pvc::{build_nodes_volume, build_shared_pvc},
+        volumes::build_db_volumes,
+    },
     env::redis::build_cluster_common_env,
     reconciler::{
         cluster_main::reconcile_main,
@@ -15,9 +18,10 @@ use crate::{
     spec::Cluster,
     state::Context,
 };
+use k8s_openapi::api::core::v1::PersistentVolumeClaim;
 use kube::{
     Resource, ResourceExt,
-    api::PatchParams,
+    api::{Patch, PatchParams},
     runtime::{
         controller::Action,
         events::{Event, EventType},
@@ -50,7 +54,24 @@ pub async fn apply(c: &Cluster, ctx: Arc<Context>) -> Result<Action> {
         &owner,
     )
     .await?;
-    let (volumes, mounts) = build_db_volumes(&name, &c.spec.database);
+    let (mut volumes, mut mounts) = build_db_volumes(&name, &c.spec.database);
+    // Shared RWX community-nodes volume mounted on every role (when configured).
+    if let Some(storage) = c
+        .spec
+        .community_nodes
+        .as_ref()
+        .and_then(|cn| cn.shared_storage.as_ref())
+    {
+        let pvc_name = format!("{name}-nodes");
+        let pvc = build_shared_pvc(&pvc_name, &name, &c.spec.image, storage, &owner);
+        actx.api::<PersistentVolumeClaim>()
+            .patch(&pvc_name, &patch, &Patch::Apply(&pvc))
+            .await
+            .map_err(Error::KubeError)?;
+        let (v, m) = build_nodes_volume(&pvc_name);
+        volumes.push(v);
+        mounts.push(m);
+    }
     let bundle = Bundle {
         env: build_cluster_common_env(c, &key_secret),
         volumes,

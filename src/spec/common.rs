@@ -87,3 +87,20 @@ pub struct PersistenceConfig {
 fn default_access_mode() -> String {
     "ReadWriteOnce".to_string()
 }
+
+/// A volume claim meant to be shared across pods. Same shape as
+/// `PersistenceConfig` but the access mode defaults to `ReadWriteMany` — the
+/// whole point is concurrent mounts on every role.
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+pub struct SharedStorage {
+    /// Storage request, e.g. `5Gi`.
+    pub size: String,
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "storageClassName")]
+    pub storage_class_name: Option<String>,
+    #[serde(default = "default_rwx_access_mode", rename = "accessMode")]
+    pub access_mode: String,
+}
+
+fn default_rwx_access_mode() -> String {
+    "ReadWriteMany".to_string()
+}
