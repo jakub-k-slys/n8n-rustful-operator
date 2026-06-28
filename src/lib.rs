@@ -13,8 +13,8 @@ pub use metrics::Metrics;
 pub use reconciler::run;
 pub use spec::{
     Autoscaling, BinaryDataSpec, CLUSTER_FINALIZER, Cluster, ClusterSpec, ClusterStatus,
-    CommunityNodesConfig, CommunityPackage, DatabaseSpec, DatabaseSsl, EncryptionKeySpec, EnvVar,
-    EnvVarSource, GatewayRef, HttpRouteConfig, IngressConfig, LoggingConfig, MainConfig, MysqlConfig,
+    CommunityNodesConfig, CommunityPackage, DatabaseSpec, DatabaseSsl, DeploymentStrategy, EncryptionKeySpec,
+    EnvVar, EnvVarSource, GatewayRef, HttpRouteConfig, IngressConfig, LoggingConfig, MainConfig, MysqlConfig,
     NetworkingSpec, PersistenceConfig, PodConfig, PostgresConfig, RedisConfig, ResourceList,
     ResourceRequirements, S3Config, SINGLE_FINALIZER, SecretKeyRef, ServiceConfig, SharedStorage, Single,
     SingleSpec, SingleStatus, SmtpAuth, SmtpConfig, SqliteConfig, WebhookConfig, WorkerConfig,

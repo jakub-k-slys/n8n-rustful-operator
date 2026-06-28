@@ -1,9 +1,32 @@
 //! Coverage for the pure object-builder helpers in `builders` (resources +
 //! pod scheduling/metadata). No cluster needed.
 
-use n8n_rustful_operator::builders::{apply_pod_config, resources};
-use n8n_rustful_operator::{PodConfig, ResourceList, ResourceRequirements};
+use n8n_rustful_operator::builders::{apply_pod_config, deployment_strategy, resources};
+use n8n_rustful_operator::{DeploymentStrategy, PodConfig, ResourceList, ResourceRequirements};
 use serde_json::json;
+
+#[test]
+fn strategy_recreate_is_bare() {
+    let s = DeploymentStrategy {
+        type_: "Recreate".into(),
+        max_surge: None,
+        max_unavailable: None,
+    };
+    assert_eq!(deployment_strategy(&s), json!({ "type": "Recreate" }));
+}
+
+#[test]
+fn strategy_rolling_update_carries_tuning() {
+    let s = DeploymentStrategy {
+        type_: "RollingUpdate".into(),
+        max_surge: Some("1".into()),
+        max_unavailable: Some("0".into()),
+    };
+    assert_eq!(
+        deployment_strategy(&s),
+        json!({ "type": "RollingUpdate", "rollingUpdate": { "maxSurge": "1", "maxUnavailable": "0" } })
+    );
+}
 
 #[test]
 fn resources_omits_unset_quantities() {

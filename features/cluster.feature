@@ -212,3 +212,8 @@ Feature: n8n operator reconciles Cluster custom resources
     When I apply a Cluster "override" with secureCookie true and main extraEnv "N8N_SECURE_COOKIE"="false"
     Then the Deployment "override-main" has env var "N8N_SECURE_COOKIE" set to "false"
     And the Deployment "override-worker" has env var "N8N_SECURE_COOKIE" set to "true"
+
+  Scenario: A Recreate strategy is applied to the main Deployment
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    When I apply a Cluster "recreate-main" with main deployment strategy "Recreate"
+    Then the Deployment "recreate-main-main" has update strategy "Recreate"

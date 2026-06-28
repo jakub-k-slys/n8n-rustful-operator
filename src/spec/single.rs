@@ -1,5 +1,7 @@
 use crate::spec::{
-    common::{EncryptionKeySpec, EnvVar, PersistenceConfig, ResourceRequirements, ServiceConfig},
+    common::{
+        DeploymentStrategy, EncryptionKeySpec, EnvVar, PersistenceConfig, ResourceRequirements, ServiceConfig,
+    },
     database::DatabaseSpec,
     logging::LoggingConfig,
     networking::NetworkingSpec,
@@ -62,6 +64,9 @@ pub struct SingleSpec {
     /// Pod-level scheduling and metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pod: Option<PodConfig>,
+    /// Deployment update strategy (e.g. `Recreate` for an RWO PVC).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strategy: Option<DeploymentStrategy>,
     /// SMTP notification settings (sets `N8N_EMAIL_MODE`/`N8N_SMTP_*`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub smtp: Option<SmtpConfig>,

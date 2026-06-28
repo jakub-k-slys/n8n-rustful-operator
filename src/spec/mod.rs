@@ -13,8 +13,8 @@ pub mod storage;
 
 pub use cluster::{CLUSTER_FINALIZER, Cluster, ClusterSpec, ClusterStatus};
 pub use common::{
-    EncryptionKeySpec, EnvVar, EnvVarSource, PersistenceConfig, ResourceList, ResourceRequirements,
-    SecretKeyRef, ServiceConfig, SharedStorage, default_service_type,
+    DeploymentStrategy, EncryptionKeySpec, EnvVar, EnvVarSource, PersistenceConfig, ResourceList,
+    ResourceRequirements, SecretKeyRef, ServiceConfig, SharedStorage, default_service_type,
 };
 pub use community::{CommunityNodesConfig, CommunityPackage};
 pub use database::{DatabaseSpec, DatabaseSsl, MysqlConfig, PostgresConfig, SqliteConfig};

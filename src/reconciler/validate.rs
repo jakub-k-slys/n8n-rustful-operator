@@ -1,7 +1,26 @@
 use crate::{
     Error, Result,
-    spec::{BinaryDataSpec, Cluster, CommunityNodesConfig, DatabaseSpec, EnvVar, SmtpConfig},
+    spec::{
+        BinaryDataSpec, Cluster, CommunityNodesConfig, DatabaseSpec, DeploymentStrategy, EnvVar, SmtpConfig,
+    },
 };
+
+pub fn validate_strategy(s: Option<&DeploymentStrategy>) -> Result<()> {
+    if let Some(s) = s {
+        if !matches!(s.type_.as_str(), "RollingUpdate" | "Recreate") {
+            return Err(Error::IllegalStrategy(format!(
+                "unknown strategy.type {:?} (want RollingUpdate or Recreate)",
+                s.type_
+            )));
+        }
+        if s.type_ == "Recreate" && (s.max_surge.is_some() || s.max_unavailable.is_some()) {
+            return Err(Error::IllegalStrategy(
+                "strategy.maxSurge/maxUnavailable are only valid with type=RollingUpdate".into(),
+            ));
+        }
+    }
+    Ok(())
+}
 
 /// Env names (and prefixes) the operator wires itself; users may not shadow
 /// them via `extraEnv`.
@@ -121,6 +140,11 @@ pub fn validate_cluster(c: &Cluster) -> Result<()> {
     validate_smtp(c.spec.smtp.as_ref())?;
     validate_community(c.spec.community_nodes.as_ref())?;
     validate_binary_data(c.spec.binary_data.as_ref())?;
+    validate_strategy(c.spec.main.strategy.as_ref())?;
+    validate_strategy(c.spec.workers.strategy.as_ref())?;
+    if let Some(wh) = &c.spec.webhooks {
+        validate_strategy(wh.strategy.as_ref())?;
+    }
     Ok(())
 }
 

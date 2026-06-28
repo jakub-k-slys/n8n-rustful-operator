@@ -49,6 +49,7 @@ fn base_spec(image: &str) -> SingleSpec {
         image_pull_secrets: vec![],
         resources: None,
         pod: None,
+        strategy: None,
         smtp: None,
         logging: None,
         image: image.into(),
@@ -309,6 +310,17 @@ async fn when_apply_logging(w: &mut E2eWorld, name: String, level: String, diagn
         diagnostics: Some(diagnostics),
         metrics: Some(metrics),
         ..Default::default()
+    });
+    apply_with_spec(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Single "([^"]+)" with deployment strategy "([^"]+)"$"#)]
+async fn when_apply_strategy(w: &mut E2eWorld, name: String, strategy: String) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.strategy = Some(n8n_rustful_operator::DeploymentStrategy {
+        type_: strategy,
+        max_surge: None,
+        max_unavailable: None,
     });
     apply_with_spec(w, &name, spec).await;
 }
@@ -638,6 +650,33 @@ async fn deployment_pod_config(
                     .map(|v| v == &sel_val)
                     .unwrap_or(false);
                 sa_ok && sel_ok
+            }
+        },
+    )
+    .await;
+}
+
+#[then(regex = r#"^the Deployment "([^"]+)" has update strategy "([^"]+)"$"#)]
+async fn deployment_strategy(w: &mut E2eWorld, deployment: String, strategy: String) {
+    let client = w.client().clone();
+    let d = deployment.clone();
+    wait_until(
+        60,
+        &format!("Deployment/{deployment} strategy.type={strategy}"),
+        move || {
+            let client = client.clone();
+            let d = d.clone();
+            let strategy = strategy.clone();
+            async move {
+                let api: Api<Deployment> = Api::namespaced(client, NS);
+                api.get_opt(&d)
+                    .await
+                    .unwrap()
+                    .and_then(|dep| dep.spec)
+                    .and_then(|s| s.strategy)
+                    .and_then(|st| st.type_)
+                    .map(|t| t == strategy)
+                    .unwrap_or(false)
             }
         },
     )
@@ -1262,6 +1301,7 @@ async fn apply_cluster_full(
             autoscaling: None,
             resources: None,
             pod: None,
+            strategy: None,
         },
         webhooks: Some(WebhookConfig {
             extra_env: vec![],
@@ -1272,6 +1312,7 @@ async fn apply_cluster_full(
             networking: None,
             resources: None,
             pod: None,
+            strategy: None,
         }),
     };
     apply_cluster(w, &name, spec).await;
@@ -1327,6 +1368,61 @@ async fn apply_cluster_with_main_pv(w: &mut E2eWorld, name: String, size: String
             autoscaling: None,
             resources: None,
             pod: None,
+            strategy: None,
+        },
+        webhooks: None,
+    };
+    apply_cluster(w, &name, spec).await;
+}
+
+#[when(regex = r#"^I apply a Cluster "([^"]+)" with main deployment strategy "([^"]+)"$"#)]
+async fn apply_cluster_main_strategy(w: &mut E2eWorld, name: String, strategy: String) {
+    let mut pg = pg_postgres_config();
+    pg.host = "pg.example.com".into();
+    let spec = ClusterSpec {
+        secure_cookie: None,
+        extra_env: vec![],
+        image_pull_secrets: vec![],
+        binary_data: None,
+        smtp: None,
+        logging: None,
+        community_nodes: None,
+        image: "nginx:alpine".into(),
+        encryption_key: None,
+        database: DatabaseSpec {
+            type_: "postgresdb".into(),
+            sqlite: None,
+            postgres: Some(pg),
+            mysql: None,
+        },
+        redis: RedisConfig {
+            host: "redis.example.com".into(),
+            port: Some(6379),
+            db: None,
+            password_secret: None,
+            username_secret: None,
+            tls: None,
+            prefix: None,
+        },
+        main: MainConfig {
+            extra_env: vec![],
+            replicas: 1,
+            strategy: Some(n8n_rustful_operator::DeploymentStrategy {
+                type_: strategy,
+                max_surge: None,
+                max_unavailable: None,
+            }),
+            ..Default::default()
+        },
+        workers: WorkerConfig {
+            extra_env: vec![],
+            replicas: 1,
+            image: None,
+            concurrency: None,
+            autoscaling: None,
+            resources: None,
+            pod: None,
+            strategy: None,
         },
         webhooks: None,
     };
@@ -1368,6 +1464,7 @@ async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
             autoscaling: None,
             resources: None,
             pod: None,
+            strategy: None,
         },
         webhooks: None,
     };
@@ -1538,6 +1635,7 @@ async fn apply_cluster_byo_key(w: &mut E2eWorld, name: String, secret: String, k
             autoscaling: None,
             resources: None,
             pod: None,
+            strategy: None,
         },
         webhooks: None,
     };
@@ -1592,6 +1690,7 @@ async fn apply_cluster_main_ingress(w: &mut E2eWorld, name: String, class: Strin
             autoscaling: None,
             resources: None,
             pod: None,
+            strategy: None,
         },
         webhooks: None,
     };
@@ -1700,6 +1799,7 @@ async fn apply_cluster_main_and_webhook_host(
         extra_env: vec![],
         resources: None,
         pod: None,
+        strategy: None,
     });
     apply_cluster(w, &name, spec).await;
 }
@@ -1816,6 +1916,7 @@ async fn apply_cluster_image_overrides(
             autoscaling: None,
             resources: None,
             pod: None,
+            strategy: None,
         },
         webhooks: None,
     };
@@ -1863,6 +1964,7 @@ async fn apply_cluster_redis_prefix(w: &mut E2eWorld, name: String, prefix: Stri
             autoscaling: None,
             resources: None,
             pod: None,
+            strategy: None,
         },
         webhooks: None,
     };
@@ -2184,6 +2286,7 @@ async fn apply_cluster_main_route(
             autoscaling: None,
             resources: None,
             pod: None,
+            strategy: None,
         },
         webhooks: None,
     };
@@ -2315,6 +2418,7 @@ async fn apply_cluster_hpa(w: &mut E2eWorld, name: String, min: i32, max: i32) {
             }),
             resources: None,
             pod: None,
+            strategy: None,
         },
         webhooks: None,
     };

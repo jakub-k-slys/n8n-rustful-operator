@@ -522,6 +522,24 @@ spec:
                 - port
                 - sender
                 type: object
+              strategy:
+                description: Deployment update strategy (e.g. `Recreate` for an RWO PVC).
+                nullable: true
+                properties:
+                  maxSurge:
+                    description: '`RollingUpdate` only: extra pods allowed during an update (e.g. `1` or `25%`).'
+                    nullable: true
+                    type: string
+                  maxUnavailable:
+                    description: '`RollingUpdate` only: pods that may be unavailable during an update.'
+                    nullable: true
+                    type: string
+                  type:
+                    description: '`RollingUpdate` (k8s default) or `Recreate`.'
+                    type: string
+                required:
+                - type
+                type: object
             type: object
           status:
             nullable: true
@@ -1198,6 +1216,24 @@ spec:
                         description: '`ClusterIP` (default), `NodePort`, or `LoadBalancer`.'
                         type: string
                     type: object
+                  strategy:
+                    description: Deployment update strategy (e.g. `Recreate` for an RWO PVC).
+                    nullable: true
+                    properties:
+                      maxSurge:
+                        description: '`RollingUpdate` only: extra pods allowed during an update (e.g. `1` or `25%`).'
+                        nullable: true
+                        type: string
+                      maxUnavailable:
+                        description: '`RollingUpdate` only: pods that may be unavailable during an update.'
+                        nullable: true
+                        type: string
+                      type:
+                        description: '`RollingUpdate` (k8s default) or `Recreate`.'
+                        type: string
+                    required:
+                    - type
+                    type: object
                 type: object
               redis:
                 properties:
@@ -1479,6 +1515,24 @@ spec:
                         description: '`ClusterIP` (default), `NodePort`, or `LoadBalancer`.'
                         type: string
                     type: object
+                  strategy:
+                    description: Deployment update strategy (e.g. `Recreate` for an RWO PVC).
+                    nullable: true
+                    properties:
+                      maxSurge:
+                        description: '`RollingUpdate` only: extra pods allowed during an update (e.g. `1` or `25%`).'
+                        nullable: true
+                        type: string
+                      maxUnavailable:
+                        description: '`RollingUpdate` only: pods that may be unavailable during an update.'
+                        nullable: true
+                        type: string
+                      type:
+                        description: '`RollingUpdate` (k8s default) or `Recreate`.'
+                        type: string
+                    required:
+                    - type
+                    type: object
                 required:
                 - replicas
                 type: object
@@ -1614,6 +1668,24 @@ spec:
                             nullable: true
                             type: string
                         type: object
+                    type: object
+                  strategy:
+                    description: Deployment update strategy (e.g. `Recreate` for an RWO PVC).
+                    nullable: true
+                    properties:
+                      maxSurge:
+                        description: '`RollingUpdate` only: extra pods allowed during an update (e.g. `1` or `25%`).'
+                        nullable: true
+                        type: string
+                      maxUnavailable:
+                        description: '`RollingUpdate` only: pods that may be unavailable during an update.'
+                        nullable: true
+                        type: string
+                      type:
+                        description: '`RollingUpdate` (k8s default) or `Recreate`.'
+                        type: string
+                    required:
+                    - type
                     type: object
                 required:
                 - replicas

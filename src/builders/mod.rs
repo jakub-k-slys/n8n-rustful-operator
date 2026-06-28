@@ -8,7 +8,7 @@ pub mod pvc;
 pub mod service;
 pub mod volumes;
 
-use crate::spec::{PodConfig, ResourceList, ResourceRequirements};
+use crate::spec::{DeploymentStrategy, PodConfig, ResourceList, ResourceRequirements};
 use serde_json::{Map, Value, json};
 
 /// Apply a `PodConfig` to a Deployment's pod `template` (the object with
@@ -50,6 +50,27 @@ fn merge_string_map(target: &mut Value, extra: &std::collections::BTreeMap<Strin
 /// `[]LocalObjectReference` JSON Kubernetes expects.
 pub fn image_pull_secrets(names: &[String]) -> Vec<Value> {
     names.iter().map(|n| json!({ "name": n })).collect()
+}
+
+/// Render a Deployment `spec.strategy`. `Recreate` is emitted bare; for
+/// `RollingUpdate` the optional `maxSurge`/`maxUnavailable` go under
+/// `rollingUpdate`.
+pub fn deployment_strategy(s: &DeploymentStrategy) -> Value {
+    let mut out = Map::new();
+    out.insert("type".into(), json!(s.type_));
+    if s.type_ == "RollingUpdate" {
+        let mut ru = Map::new();
+        if let Some(ms) = &s.max_surge {
+            ru.insert("maxSurge".into(), json!(ms));
+        }
+        if let Some(mu) = &s.max_unavailable {
+            ru.insert("maxUnavailable".into(), json!(mu));
+        }
+        if !ru.is_empty() {
+            out.insert("rollingUpdate".into(), Value::Object(ru));
+        }
+    }
+    Value::Object(out)
 }
 
 /// Render container `resources` JSON from the CPU/memory subset, omitting any

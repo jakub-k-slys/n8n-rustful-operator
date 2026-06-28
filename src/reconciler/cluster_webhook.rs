@@ -50,6 +50,7 @@ pub async fn reconcile_webhooks(
             image_pull_secrets: &c.spec.image_pull_secrets,
             resources: wh.resources.as_ref(),
             pod: wh.pod.as_ref(),
+            strategy: wh.strategy.as_ref(),
         },
         ctx.owner,
     );
