@@ -30,6 +30,12 @@ pub struct PodConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(schema_with = "preserve_arbitrary")]
     pub affinity: Option<serde_json::Value>,
+    /// Free-form pod security context (k8s `PodSecurityContext`), passed through
+    /// verbatim — e.g. `fsGroup` so a mounted PVC is writable by the n8n user
+    /// (uid/gid 1000).
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "securityContext")]
+    #[schemars(schema_with = "preserve_arbitrary")]
+    pub security_context: Option<serde_json::Value>,
     /// Extra labels merged onto the pod template metadata.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "podLabels")]
     pub pod_labels: Option<BTreeMap<String, String>>,

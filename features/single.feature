@@ -210,3 +210,7 @@ Feature: n8n operator reconciles Single custom resources
   Scenario: deployment strategy is applied to the Single Deployment
     When I apply a Single "recreated" with deployment strategy "Recreate"
     Then the Deployment "recreated" has update strategy "Recreate"
+
+  Scenario: pod securityContext fsGroup is applied to the Single Deployment
+    When I apply a Single "fsgroup" with pod fsGroup 1000
+    Then the Deployment "fsgroup" has pod fsGroup 1000

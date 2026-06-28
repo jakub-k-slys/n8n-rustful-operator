@@ -58,6 +58,7 @@ fn pod_config_applies_all_scheduling_and_merges_metadata() {
         affinity: Some(json!({
             "nodeAffinity": { "requiredDuringSchedulingIgnoredDuringExecution": { "nodeSelectorTerms": [] } }
         })),
+        security_context: Some(json!({ "fsGroup": 1000, "fsGroupChangePolicy": "OnRootMismatch" })),
         pod_labels: Some([("team".to_string(), "ops".to_string())].into()),
         pod_annotations: Some([("sidecar.istio.io/inject".to_string(), "true".to_string())].into()),
     };
@@ -72,6 +73,7 @@ fn pod_config_applies_all_scheduling_and_merges_metadata() {
     assert_eq!(template["spec"]["nodeSelector"], json!({ "disktype": "ssd" }));
     assert_eq!(template["spec"]["tolerations"][0]["key"], json!("dedicated"));
     assert!(template["spec"]["affinity"]["nodeAffinity"].is_object());
+    assert_eq!(template["spec"]["securityContext"]["fsGroup"], json!(1000));
 
     // labels: existing preserved, new merged; annotations created and merged
     assert_eq!(
