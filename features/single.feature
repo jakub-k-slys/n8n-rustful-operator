@@ -206,3 +206,7 @@ Feature: n8n operator reconciles Single custom resources
     Then the Deployment "logged" has env var "N8N_LOG_LEVEL" set to "debug"
     And the Deployment "logged" has env var "N8N_DIAGNOSTICS_ENABLED" set to "false"
     And the Deployment "logged" has env var "N8N_METRICS" set to "true"
+
+  Scenario: deployment strategy is applied to the Single Deployment
+    When I apply a Single "recreated" with deployment strategy "Recreate"
+    Then the Deployment "recreated" has update strategy "Recreate"

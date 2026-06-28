@@ -75,6 +75,7 @@ pub async fn reconcile_main(
             image_pull_secrets: &c.spec.image_pull_secrets,
             resources: c.spec.main.resources.as_ref(),
             pod: c.spec.main.pod.as_ref(),
+            strategy: c.spec.main.strategy.as_ref(),
         },
         ctx.owner,
     );

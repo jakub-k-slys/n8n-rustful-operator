@@ -4,11 +4,27 @@
 
 use n8n_rustful_operator::reconciler::validate::{
     validate_binary_data, validate_community, validate_database, validate_extra_env, validate_smtp,
+    validate_strategy,
 };
 use n8n_rustful_operator::{
-    BinaryDataSpec, CommunityNodesConfig, CommunityPackage, DatabaseSpec, EnvVar, EnvVarSource, MysqlConfig,
-    PostgresConfig, S3Config, SecretKeyRef, SharedStorage, SmtpAuth, SmtpConfig,
+    BinaryDataSpec, CommunityNodesConfig, CommunityPackage, DatabaseSpec, DeploymentStrategy, EnvVar,
+    EnvVarSource, MysqlConfig, PostgresConfig, S3Config, SecretKeyRef, SharedStorage, SmtpAuth, SmtpConfig,
 };
+
+#[test]
+fn strategy_rules() {
+    let strat = |t: &str, ms: Option<&str>| DeploymentStrategy {
+        type_: t.into(),
+        max_surge: ms.map(Into::into),
+        max_unavailable: None,
+    };
+    assert!(validate_strategy(None).is_ok());
+    assert!(validate_strategy(Some(&strat("Recreate", None))).is_ok());
+    assert!(validate_strategy(Some(&strat("RollingUpdate", Some("1")))).is_ok());
+    assert!(validate_strategy(Some(&strat("Weird", None))).is_err());
+    // surge/unavailable only valid with RollingUpdate
+    assert!(validate_strategy(Some(&strat("Recreate", Some("1")))).is_err());
+}
 
 fn skref(name: &str, key: &str) -> SecretKeyRef {
     SecretKeyRef {

@@ -104,3 +104,19 @@ pub struct SharedStorage {
 fn default_rwx_access_mode() -> String {
     "ReadWriteMany".to_string()
 }
+
+/// Deployment update strategy. `Recreate` terminates the old pod before starting
+/// the new one — required for a Deployment that mounts a `ReadWriteOnce` PVC,
+/// since the default `RollingUpdate` surges a second pod that can't attach it.
+#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+pub struct DeploymentStrategy {
+    /// `RollingUpdate` (k8s default) or `Recreate`.
+    #[serde(rename = "type")]
+    pub type_: String,
+    /// `RollingUpdate` only: extra pods allowed during an update (e.g. `1` or `25%`).
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "maxSurge")]
+    pub max_surge: Option<String>,
+    /// `RollingUpdate` only: pods that may be unavailable during an update.
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "maxUnavailable")]
+    pub max_unavailable: Option<String>,
+}

@@ -1,6 +1,6 @@
 use crate::{
     builders::{
-        apply_pod_config, image_pull_secrets, pvc::build_persistence_volume, resources,
+        apply_pod_config, deployment_strategy, image_pull_secrets, pvc::build_persistence_volume, resources,
         volumes::build_db_volumes,
     },
     env::{
@@ -98,6 +98,9 @@ pub fn build_deployment(
     });
     if let Some(pc) = &spec.pod {
         apply_pod_config(&mut dep_json["spec"]["template"], pc);
+    }
+    if let Some(st) = &spec.strategy {
+        dep_json["spec"]["strategy"] = deployment_strategy(st);
     }
     serde_json::from_value(dep_json).expect("static deployment schema is valid")
 }

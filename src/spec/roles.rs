@@ -1,5 +1,5 @@
 use crate::spec::{
-    common::{EnvVar, PersistenceConfig, ResourceRequirements, ServiceConfig},
+    common::{DeploymentStrategy, EnvVar, PersistenceConfig, ResourceRequirements, ServiceConfig},
     networking::NetworkingSpec,
     pod::PodConfig,
 };
@@ -34,6 +34,9 @@ pub struct MainConfig {
     /// Pod-level scheduling and metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pod: Option<PodConfig>,
+    /// Deployment update strategy (e.g. `Recreate` for an RWO PVC).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strategy: Option<DeploymentStrategy>,
     /// `N8N_MULTI_MAIN_SETUP_KEY_TTL` — leader key TTL in seconds. Only takes
     /// effect when multi-main is active (i.e. `replicas` > 1).
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "multiMainKeyTtl")]
@@ -72,6 +75,9 @@ pub struct WorkerConfig {
     /// Pod-level scheduling and metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pod: Option<PodConfig>,
+    /// Deployment update strategy (e.g. `Recreate` for an RWO PVC).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strategy: Option<DeploymentStrategy>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
@@ -108,4 +114,7 @@ pub struct WebhookConfig {
     /// Pod-level scheduling and metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pod: Option<PodConfig>,
+    /// Deployment update strategy (e.g. `Recreate` for an RWO PVC).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strategy: Option<DeploymentStrategy>,
 }

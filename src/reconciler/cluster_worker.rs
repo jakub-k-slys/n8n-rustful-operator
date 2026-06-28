@@ -60,6 +60,7 @@ pub async fn reconcile_workers(
             image_pull_secrets: &c.spec.image_pull_secrets,
             resources: c.spec.workers.resources.as_ref(),
             pod: c.spec.workers.pod.as_ref(),
+            strategy: c.spec.workers.strategy.as_ref(),
         },
         ctx.owner,
     );

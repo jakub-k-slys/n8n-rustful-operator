@@ -1,6 +1,6 @@
 use crate::{
     Error, Result,
-    reconciler::validate::{validate_database, validate_extra_env, validate_smtp},
+    reconciler::validate::{validate_database, validate_extra_env, validate_smtp, validate_strategy},
     spec::Single,
 };
 
@@ -19,5 +19,6 @@ pub fn validate_single(s: &Single) -> Result<()> {
     }
     validate_extra_env(&s.spec.extra_env)?;
     validate_smtp(s.spec.smtp.as_ref())?;
+    validate_strategy(s.spec.strategy.as_ref())?;
     Ok(())
 }

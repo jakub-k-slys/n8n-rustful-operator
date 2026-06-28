@@ -96,7 +96,9 @@ One module per concern, all re-exported from `spec::*`:
   `x-kubernetes-preserve-unknown-fields`, plus `podLabels`/`podAnnotations`).
 - `common.rs` — shared building blocks: `SecretKeyRef`, `EncryptionKeySpec`, `EnvVar`
   (inline `value` **or** `valueFrom.secretRef`, mutually exclusive), `EnvVarSource`,
-  `ServiceConfig`, `PersistenceConfig`, `ResourceRequirements`/`ResourceList`.
+  `ServiceConfig`, `PersistenceConfig`, `ResourceRequirements`/`ResourceList`,
+  `DeploymentStrategy` (`type` ∈ `RollingUpdate`/`Recreate`, with optional
+  `maxSurge`/`maxUnavailable` — `Recreate` lets an RWO PVC avoid a multi-attach deadlock).
 
 The `#[kube(...)]` attribute sets `plural` explicitly (`singles`, `clusters`) — without it,
 kube-derive would mis-pluralize. The finalizer strings mirror the CRD names
@@ -139,7 +141,8 @@ kube-derive would mis-pluralize. The finalizer strings mirror the CRD names
 `build_deployment`, `build_cluster_deployment`, `build_service`, `build_ingress`,
 `build_http_route` (primary route + optional `<name>-redirect` companion), `build_hpa`,
 `build_data_pvc`, and `volumes` (DB/SSL volume + mount wiring). `mod.rs` also holds the
-shared pod-spec helpers `image_pull_secrets`, `resources`, and `apply_pod_config`. These
+shared pod-spec helpers `image_pull_secrets`, `resources`, `apply_pod_config`, and
+`deployment_strategy` (renders `.spec.strategy`). These
 take spec + owner and return the JSON/typed object to apply — no I/O.
 
 ### `src/env/` — n8n environment variables

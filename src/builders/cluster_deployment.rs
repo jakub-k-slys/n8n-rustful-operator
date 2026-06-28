@@ -1,6 +1,6 @@
-use crate::builders::{apply_pod_config, image_pull_secrets, resources};
+use crate::builders::{apply_pod_config, deployment_strategy, image_pull_secrets, resources};
 use crate::labels::{common_annotations, common_labels, selector_labels};
-use crate::spec::{PodConfig, ResourceRequirements};
+use crate::spec::{DeploymentStrategy, PodConfig, ResourceRequirements};
 use k8s_openapi::{api::apps::v1::Deployment, apimachinery::pkg::apis::meta::v1::OwnerReference};
 use serde_json::{Value, json};
 
@@ -21,6 +21,8 @@ pub struct DeploymentInputs<'a> {
     pub resources: Option<&'a ResourceRequirements>,
     /// Pod-level scheduling and metadata, if set for this role.
     pub pod: Option<&'a PodConfig>,
+    /// Deployment update strategy, if set for this role.
+    pub strategy: Option<&'a DeploymentStrategy>,
 }
 
 pub fn build_cluster_deployment(input: &DeploymentInputs<'_>, owner: &OwnerReference) -> Deployment {
@@ -60,6 +62,9 @@ pub fn build_cluster_deployment(input: &DeploymentInputs<'_>, owner: &OwnerRefer
     }
     if let Some(pc) = input.pod {
         apply_pod_config(&mut spec["template"], pc);
+    }
+    if let Some(st) = input.strategy {
+        spec["strategy"] = deployment_strategy(st);
     }
     serde_json::from_value(json!({
         "apiVersion": "apps/v1",
