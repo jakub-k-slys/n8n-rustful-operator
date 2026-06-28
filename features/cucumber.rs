@@ -271,6 +271,16 @@ async fn when_apply_pod_config(w: &mut E2eWorld, name: String, sa: String, sel_k
     apply_with_spec(w, &name, spec).await;
 }
 
+#[when(regex = r#"^I apply a Single "([^"]+)" with pod fsGroup (\d+)$"#)]
+async fn when_apply_pod_security_context(w: &mut E2eWorld, name: String, fs_group: i64) {
+    let mut spec = base_spec("nginx:alpine");
+    spec.pod = Some(n8n_rustful_operator::PodConfig {
+        security_context: Some(serde_json::json!({ "fsGroup": fs_group })),
+        ..Default::default()
+    });
+    apply_with_spec(w, &name, spec).await;
+}
+
 #[when(
     regex = r#"^I apply a Single "([^"]+)" with smtp host "([^"]+)" port (\d+) and password secret "([^"]+)" key "([^"]+)"$"#
 )]
@@ -650,6 +660,33 @@ async fn deployment_pod_config(
                     .map(|v| v == &sel_val)
                     .unwrap_or(false);
                 sa_ok && sel_ok
+            }
+        },
+    )
+    .await;
+}
+
+#[then(regex = r#"^the Deployment "([^"]+)" has pod fsGroup (\d+)$"#)]
+async fn deployment_pod_fs_group(w: &mut E2eWorld, deployment: String, fs_group: i64) {
+    let client = w.client().clone();
+    let d = deployment.clone();
+    wait_until(
+        60,
+        &format!("Deployment/{deployment} pod fsGroup={fs_group}"),
+        move || {
+            let client = client.clone();
+            let d = d.clone();
+            async move {
+                let api: Api<Deployment> = Api::namespaced(client, NS);
+                api.get_opt(&d)
+                    .await
+                    .unwrap()
+                    .and_then(|dep| dep.spec)
+                    .and_then(|s| s.template.spec)
+                    .and_then(|ps| ps.security_context)
+                    .and_then(|sc| sc.fs_group)
+                    .map(|fg| fg == fs_group)
+                    .unwrap_or(false)
             }
         },
     )

@@ -92,8 +92,9 @@ One module per concern, all re-exported from `spec::*`:
 - `logging.rs` — `LoggingConfig`: log level, log output, diagnostics, version
   notifications and the Prometheus metrics toggle.
 - `pod.rs` — `PodConfig`: pod-level scheduling/metadata (`serviceAccountName`,
-  `nodeSelector`, free-form `tolerations`/`affinity` carrying
-  `x-kubernetes-preserve-unknown-fields`, plus `podLabels`/`podAnnotations`).
+  `nodeSelector`, free-form `tolerations`/`affinity`/`securityContext` carrying
+  `x-kubernetes-preserve-unknown-fields` — `securityContext` e.g. `fsGroup` so a
+  mounted PVC is writable by the n8n user, plus `podLabels`/`podAnnotations`).
 - `common.rs` — shared building blocks: `SecretKeyRef`, `EncryptionKeySpec`, `EnvVar`
   (inline `value` **or** `valueFrom.secretRef`, mutually exclusive), `EnvVarSource`,
   `ServiceConfig`, `PersistenceConfig`, `ResourceRequirements`/`ResourceList`,

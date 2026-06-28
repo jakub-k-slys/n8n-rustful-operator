@@ -28,6 +28,9 @@ pub fn apply_pod_config(template: &mut Value, pc: &PodConfig) {
     if let Some(a) = &pc.affinity {
         spec["affinity"] = a.clone();
     }
+    if let Some(sc) = &pc.security_context {
+        spec["securityContext"] = sc.clone();
+    }
     if let Some(labels) = &pc.pod_labels {
         merge_string_map(&mut template["metadata"]["labels"], labels);
     }

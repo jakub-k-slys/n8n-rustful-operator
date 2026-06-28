@@ -406,6 +406,12 @@ spec:
                     description: Extra labels merged onto the pod template metadata.
                     nullable: true
                     type: object
+                  securityContext:
+                    description: |-
+                      Free-form pod security context (k8s `PodSecurityContext`), passed through
+                      verbatim — e.g. `fsGroup` so a mounted PVC is writable by the n8n user
+                      (uid/gid 1000).
+                    x-kubernetes-preserve-unknown-fields: true
                   serviceAccountName:
                     description: |-
                       ServiceAccount the pods run as (also where image-pull Secrets attached
@@ -1160,6 +1166,12 @@ spec:
                         description: Extra labels merged onto the pod template metadata.
                         nullable: true
                         type: object
+                      securityContext:
+                        description: |-
+                          Free-form pod security context (k8s `PodSecurityContext`), passed through
+                          verbatim — e.g. `fsGroup` so a mounted PVC is writable by the n8n user
+                          (uid/gid 1000).
+                        x-kubernetes-preserve-unknown-fields: true
                       serviceAccountName:
                         description: |-
                           ServiceAccount the pods run as (also where image-pull Secrets attached
@@ -1465,6 +1477,12 @@ spec:
                         description: Extra labels merged onto the pod template metadata.
                         nullable: true
                         type: object
+                      securityContext:
+                        description: |-
+                          Free-form pod security context (k8s `PodSecurityContext`), passed through
+                          verbatim — e.g. `fsGroup` so a mounted PVC is writable by the n8n user
+                          (uid/gid 1000).
+                        x-kubernetes-preserve-unknown-fields: true
                       serviceAccountName:
                         description: |-
                           ServiceAccount the pods run as (also where image-pull Secrets attached
@@ -1626,6 +1644,12 @@ spec:
                         description: Extra labels merged onto the pod template metadata.
                         nullable: true
                         type: object
+                      securityContext:
+                        description: |-
+                          Free-form pod security context (k8s `PodSecurityContext`), passed through
+                          verbatim — e.g. `fsGroup` so a mounted PVC is writable by the n8n user
+                          (uid/gid 1000).
+                        x-kubernetes-preserve-unknown-fields: true
                       serviceAccountName:
                         description: |-
                           ServiceAccount the pods run as (also where image-pull Secrets attached
