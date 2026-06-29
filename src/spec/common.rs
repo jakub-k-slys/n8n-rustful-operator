@@ -113,10 +113,13 @@ pub struct DeploymentStrategy {
     /// `RollingUpdate` (k8s default) or `Recreate`.
     #[serde(rename = "type")]
     pub type_: String,
-    /// `RollingUpdate` only: extra pods allowed during an update (e.g. `1` or `25%`).
+    /// `RollingUpdate` only: extra pods allowed during an update. A bare number
+    /// (`"1"`) is an absolute count; a percent (`"25%"`) is relative. Always a
+    /// string in the CR; the operator renders the numeric form as an integer.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "maxSurge")]
     pub max_surge: Option<String>,
-    /// `RollingUpdate` only: pods that may be unavailable during an update.
+    /// `RollingUpdate` only: pods that may be unavailable during an update. Same
+    /// number-or-percent string form as `maxSurge`.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "maxUnavailable")]
     pub max_unavailable: Option<String>,
 }

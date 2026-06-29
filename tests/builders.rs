@@ -16,7 +16,9 @@ fn strategy_recreate_is_bare() {
 }
 
 #[test]
-fn strategy_rolling_update_carries_tuning() {
+fn strategy_rolling_update_numeric_tuning_is_integer() {
+    // Bare numbers must render as JSON integers (absolute counts); the apiserver
+    // rejects a string intstr like "1" for maxSurge/maxUnavailable.
     let s = DeploymentStrategy {
         type_: "RollingUpdate".into(),
         max_surge: Some("1".into()),
@@ -24,7 +26,20 @@ fn strategy_rolling_update_carries_tuning() {
     };
     assert_eq!(
         deployment_strategy(&s),
-        json!({ "type": "RollingUpdate", "rollingUpdate": { "maxSurge": "1", "maxUnavailable": "0" } })
+        json!({ "type": "RollingUpdate", "rollingUpdate": { "maxSurge": 1, "maxUnavailable": 0 } })
+    );
+}
+
+#[test]
+fn strategy_rolling_update_percent_stays_string() {
+    let s = DeploymentStrategy {
+        type_: "RollingUpdate".into(),
+        max_surge: Some("0%".into()),
+        max_unavailable: Some("100%".into()),
+    };
+    assert_eq!(
+        deployment_strategy(&s),
+        json!({ "type": "RollingUpdate", "rollingUpdate": { "maxSurge": "0%", "maxUnavailable": "100%" } })
     );
 }
 

@@ -533,11 +533,16 @@ spec:
                 nullable: true
                 properties:
                   maxSurge:
-                    description: '`RollingUpdate` only: extra pods allowed during an update (e.g. `1` or `25%`).'
+                    description: |-
+                      `RollingUpdate` only: extra pods allowed during an update. A bare number
+                      (`"1"`) is an absolute count; a percent (`"25%"`) is relative. Always a
+                      string in the CR; the operator renders the numeric form as an integer.
                     nullable: true
                     type: string
                   maxUnavailable:
-                    description: '`RollingUpdate` only: pods that may be unavailable during an update.'
+                    description: |-
+                      `RollingUpdate` only: pods that may be unavailable during an update. Same
+                      number-or-percent string form as `maxSurge`.
                     nullable: true
                     type: string
                   type:
@@ -649,7 +654,7 @@ spec:
                   sharedStorage:
                     description: |-
                       Shared `ReadWriteMany` volume for `mode: filesystem`, mounted on every
-                      role at the binary-data path (`N8N_BINARY_DATA_STORAGE_PATH`) so files are
+                      role at the binary-data path (`N8N_STORAGE_PATH`) so files are
                       shared across roles in queue mode. Only valid with `mode: filesystem`.
                     nullable: true
                     properties:
@@ -1233,11 +1238,16 @@ spec:
                     nullable: true
                     properties:
                       maxSurge:
-                        description: '`RollingUpdate` only: extra pods allowed during an update (e.g. `1` or `25%`).'
+                        description: |-
+                          `RollingUpdate` only: extra pods allowed during an update. A bare number
+                          (`"1"`) is an absolute count; a percent (`"25%"`) is relative. Always a
+                          string in the CR; the operator renders the numeric form as an integer.
                         nullable: true
                         type: string
                       maxUnavailable:
-                        description: '`RollingUpdate` only: pods that may be unavailable during an update.'
+                        description: |-
+                          `RollingUpdate` only: pods that may be unavailable during an update. Same
+                          number-or-percent string form as `maxSurge`.
                         nullable: true
                         type: string
                       type:
@@ -1538,11 +1548,16 @@ spec:
                     nullable: true
                     properties:
                       maxSurge:
-                        description: '`RollingUpdate` only: extra pods allowed during an update (e.g. `1` or `25%`).'
+                        description: |-
+                          `RollingUpdate` only: extra pods allowed during an update. A bare number
+                          (`"1"`) is an absolute count; a percent (`"25%"`) is relative. Always a
+                          string in the CR; the operator renders the numeric form as an integer.
                         nullable: true
                         type: string
                       maxUnavailable:
-                        description: '`RollingUpdate` only: pods that may be unavailable during an update.'
+                        description: |-
+                          `RollingUpdate` only: pods that may be unavailable during an update. Same
+                          number-or-percent string form as `maxSurge`.
                         nullable: true
                         type: string
                       type:
@@ -1698,11 +1713,16 @@ spec:
                     nullable: true
                     properties:
                       maxSurge:
-                        description: '`RollingUpdate` only: extra pods allowed during an update (e.g. `1` or `25%`).'
+                        description: |-
+                          `RollingUpdate` only: extra pods allowed during an update. A bare number
+                          (`"1"`) is an absolute count; a percent (`"25%"`) is relative. Always a
+                          string in the CR; the operator renders the numeric form as an integer.
                         nullable: true
                         type: string
                       maxUnavailable:
-                        description: '`RollingUpdate` only: pods that may be unavailable during an update.'
+                        description: |-
+                          `RollingUpdate` only: pods that may be unavailable during an update. Same
+                          number-or-percent string form as `maxSurge`.
                         nullable: true
                         type: string
                       type:

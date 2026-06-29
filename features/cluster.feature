@@ -220,3 +220,10 @@ Feature: n8n operator reconciles Cluster custom resources
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"
     When I apply a Cluster "recreate-main" with main deployment strategy "Recreate"
     Then the Deployment "recreate-main-main" has update strategy "Recreate"
+
+  Scenario: An absolute-count RollingUpdate is accepted on the main Deployment
+    Given a Secret "pg-creds" exists with key "password" set to "s3cret"
+    And a Secret "redis-creds" exists with key "password" set to "rs3cret"
+    When I apply a Cluster "rollupd-main" with main RollingUpdate maxSurge "0" maxUnavailable "1"
+    Then a Deployment named "rollupd-main-main" exists in namespace "default" within 60 seconds
+    And the Deployment "rollupd-main-main" has update strategy "RollingUpdate"
