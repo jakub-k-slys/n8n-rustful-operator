@@ -27,6 +27,7 @@ pub fn validate_strategy(s: Option<&DeploymentStrategy>) -> Result<()> {
 const RESERVED_ENV: &[&str] = &[
     "N8N_ENCRYPTION_KEY",
     "EXECUTIONS_MODE",
+    "OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS",
     "N8N_CONCURRENCY_PRODUCTION_LIMIT",
     "QUEUE_HEALTH_CHECK_ACTIVE",
     "N8N_DISABLE_PRODUCTION_MAIN_PROCESS",

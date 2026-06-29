@@ -112,6 +112,7 @@ fn extra_env_rules() {
     assert!(validate_extra_env(&[ev_val("OK")]).is_ok());
     assert!(validate_extra_env(&[ev_val("DB_FOO")]).is_err());
     assert!(validate_extra_env(&[ev_val("N8N_ENCRYPTION_KEY")]).is_err());
+    assert!(validate_extra_env(&[ev_val("OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS")]).is_err());
     assert!(
         validate_extra_env(&[EnvVar {
             name: "X".into(),
