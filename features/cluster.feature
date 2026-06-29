@@ -13,7 +13,7 @@ Feature: n8n operator reconciles Cluster custom resources
     And the Deployment "qm-main" has env var "EXECUTIONS_MODE" set to "queue"
     And the Deployment "qm-worker" has env var "EXECUTIONS_MODE" set to "queue"
     And the Deployment "qm-worker" has env var "QUEUE_HEALTH_CHECK_ACTIVE" set to "true"
-    And the Deployment "qm-webhook" has env var "N8N_DISABLE_PRODUCTION_MAIN_PROCESS" set to "true"
+    And the Deployment "qm-main" has env var "N8N_DISABLE_PRODUCTION_MAIN_PROCESS" set to "true"
     And the Deployment "qm-main" has env var "QUEUE_BULL_REDIS_HOST" set to "redis.example.com"
     And the Deployment "qm-main" has env var "DB_TYPE" set to "postgresdb"
 
@@ -139,6 +139,7 @@ Feature: n8n operator reconciles Cluster custom resources
     When I apply a Cluster "wu-main" with main host "n8n.example.com"
     Then the Deployment "wu-main-main" has env var "WEBHOOK_URL" set to "http://n8n.example.com/"
     And the Deployment "wu-main-worker" has env var "WEBHOOK_URL" set to "http://n8n.example.com/"
+    And the Deployment "wu-main-main" has no env var "N8N_DISABLE_PRODUCTION_MAIN_PROCESS"
 
   Scenario: WEBHOOK_URL uses the webhook host when webhook processors are configured
     Given a Secret "pg-creds" exists with key "password" set to "s3cret"

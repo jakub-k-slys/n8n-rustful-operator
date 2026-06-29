@@ -51,9 +51,17 @@ pub async fn reconcile_main(
     let multi_main = c.spec.main.replicas > 1;
     let (vols, mounts) = main_volumes(c, &name, &image, ctx, bundle).await?;
     let defaults = cluster_role_defaults(c, c.spec.main.host.as_deref(), c.spec.main.networking.as_ref());
+    // With dedicated webhook processors, the main process must stop serving
+    // production webhooks so they are handled solely by the webhook role.
+    let webhook_offload = if c.spec.webhooks.is_some() {
+        vec![env_str("N8N_DISABLE_PRODUCTION_MAIN_PROCESS", "true")]
+    } else {
+        Vec::new()
+    };
     let env = [
         bundle.env.clone(),
         multi_main_env(c, multi_main),
+        webhook_offload,
         build_user_env(
             &defaults,
             c.spec.secure_cookie,

@@ -5,7 +5,7 @@ use crate::{
         http_route::delete_http_route,
         service::build_cluster_service,
     },
-    env::{build_user_env, cluster_role_defaults, env_str},
+    env::{build_user_env, cluster_role_defaults},
     reconciler::{
         ctx::{ApplyCtx, Bundle},
         networking::{RoleNetworking, reconcile_role_networking},
@@ -33,7 +33,6 @@ pub async fn reconcile_webhooks(
     let defaults = cluster_role_defaults(c, wh.host.as_deref(), wh.networking.as_ref());
     let env = [
         bundle.env.clone(),
-        vec![env_str("N8N_DISABLE_PRODUCTION_MAIN_PROCESS", "true")],
         build_user_env(&defaults, c.spec.secure_cookie, &c.spec.extra_env, &wh.extra_env),
     ]
     .concat();
