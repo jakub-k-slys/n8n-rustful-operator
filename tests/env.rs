@@ -225,7 +225,7 @@ fn binary_data_filesystem_path_only_with_shared_storage() {
         }),
     ));
     assert!(env.contains(&json!({
-        "name": "N8N_BINARY_DATA_STORAGE_PATH",
+        "name": "N8N_STORAGE_PATH",
         "value": "/home/node/binary-data"
     })));
 }

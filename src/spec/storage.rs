@@ -14,7 +14,7 @@ pub struct BinaryDataSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub s3: Option<S3Config>,
     /// Shared `ReadWriteMany` volume for `mode: filesystem`, mounted on every
-    /// role at the binary-data path (`N8N_BINARY_DATA_STORAGE_PATH`) so files are
+    /// role at the binary-data path (`N8N_STORAGE_PATH`) so files are
     /// shared across roles in queue mode. Only valid with `mode: filesystem`.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "sharedStorage")]
     pub shared_storage: Option<SharedStorage>,

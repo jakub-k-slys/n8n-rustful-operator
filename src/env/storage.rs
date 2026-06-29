@@ -43,7 +43,7 @@ pub fn build_binary_data_env(bd: &BinaryDataSpec) -> Vec<Value> {
         "filesystem" => {
             let mut out = vec![env_str("N8N_DEFAULT_BINARY_DATA_MODE", "filesystem")];
             if bd.shared_storage.is_some() {
-                out.push(env_str("N8N_BINARY_DATA_STORAGE_PATH", BINARY_DATA_STORAGE_PATH));
+                out.push(env_str("N8N_STORAGE_PATH", BINARY_DATA_STORAGE_PATH));
             }
             out
         }
