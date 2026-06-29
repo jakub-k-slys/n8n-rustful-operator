@@ -155,8 +155,8 @@ and each entry renders as an inline `value` or a `valueFrom.secretKeyRef`). Also
 `host_env`/`protocol_for` (derive `N8N_HOST`/`N8N_PROTOCOL`/`WEBHOOK_URL`/
 `N8N_EDITOR_BASE_URL` from a role's host). Per-concern modules: `database.rs`
 (`DatabaseSpec` → `DB_*` + SSL cert mounts), `redis.rs` (`build_cluster_common_env` —
-`EXECUTIONS_MODE=queue`, `QUEUE_BULL_REDIS_*`, encryption key, binary-data, shared by all
-cluster roles), `storage.rs` (`build_binary_data_env`), `smtp.rs` (`build_smtp_env`),
+`EXECUTIONS_MODE=queue`, `OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS=true`, `QUEUE_BULL_REDIS_*`,
+encryption key, binary-data, shared by all cluster roles), `storage.rs` (`build_binary_data_env`), `smtp.rs` (`build_smtp_env`),
 `logging.rs` (`build_logging_env`).
 
 ### `src/metrics/` — Prometheus

@@ -30,6 +30,9 @@ pub fn build_redis_env(redis: &RedisConfig) -> Vec<Value> {
 pub fn build_cluster_common_env(c: &Cluster, key_secret: &SecretKeyRef) -> Vec<Value> {
     let mut env = vec![
         env_str("EXECUTIONS_MODE", "queue"),
+        // Route manual executions to workers (n8n deprecates running them on
+        // main in scaling mode); matches n8n's own queue-mode container setup.
+        env_str("OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS", "true"),
         json!({
             "name": "N8N_ENCRYPTION_KEY",
             "valueFrom": { "secretKeyRef": { "name": key_secret.name, "key": key_secret.key } }

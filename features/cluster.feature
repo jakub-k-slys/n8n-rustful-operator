@@ -13,6 +13,8 @@ Feature: n8n operator reconciles Cluster custom resources
     And the Deployment "qm-main" has env var "EXECUTIONS_MODE" set to "queue"
     And the Deployment "qm-worker" has env var "EXECUTIONS_MODE" set to "queue"
     And the Deployment "qm-worker" has env var "QUEUE_HEALTH_CHECK_ACTIVE" set to "true"
+    And the Deployment "qm-main" has env var "OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS" set to "true"
+    And the Deployment "qm-worker" has env var "OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS" set to "true"
     And the Deployment "qm-main" has env var "N8N_DISABLE_PRODUCTION_MAIN_PROCESS" set to "true"
     And the Deployment "qm-main" has env var "QUEUE_BULL_REDIS_HOST" set to "redis.example.com"
     And the Deployment "qm-main" has env var "DB_TYPE" set to "postgresdb"
