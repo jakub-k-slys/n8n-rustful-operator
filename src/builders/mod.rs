@@ -55,6 +55,18 @@ pub fn image_pull_secrets(names: &[String]) -> Vec<Value> {
     names.iter().map(|n| json!({ "name": n })).collect()
 }
 
+/// Render a k8s `IntOrString` from the CRD's string field: a purely-numeric
+/// value (e.g. `"1"`) becomes a JSON number (an absolute count), anything else
+/// (e.g. `"25%"`) stays a string. The apiserver rejects a bare-integer string
+/// like `"1"` for `maxSurge`/`maxUnavailable` — a string intstr must be a
+/// percent — so the numeric form must be emitted as a number.
+fn int_or_string(v: &str) -> Value {
+    match v.parse::<i64>() {
+        Ok(n) => json!(n),
+        Err(_) => json!(v),
+    }
+}
+
 /// Render a Deployment `spec.strategy`. `Recreate` is emitted bare; for
 /// `RollingUpdate` the optional `maxSurge`/`maxUnavailable` go under
 /// `rollingUpdate`.
@@ -64,10 +76,10 @@ pub fn deployment_strategy(s: &DeploymentStrategy) -> Value {
     if s.type_ == "RollingUpdate" {
         let mut ru = Map::new();
         if let Some(ms) = &s.max_surge {
-            ru.insert("maxSurge".into(), json!(ms));
+            ru.insert("maxSurge".into(), int_or_string(ms));
         }
         if let Some(mu) = &s.max_unavailable {
-            ru.insert("maxUnavailable".into(), json!(mu));
+            ru.insert("maxUnavailable".into(), int_or_string(mu));
         }
         if !ru.is_empty() {
             out.insert("rollingUpdate".into(), Value::Object(ru));

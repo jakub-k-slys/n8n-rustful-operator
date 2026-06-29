@@ -1466,6 +1466,67 @@ async fn apply_cluster_main_strategy(w: &mut E2eWorld, name: String, strategy: S
     apply_cluster(w, &name, spec).await;
 }
 
+#[when(
+    regex = r#"^I apply a Cluster "([^"]+)" with main RollingUpdate maxSurge "([^"]+)" maxUnavailable "([^"]+)"$"#
+)]
+async fn apply_cluster_main_rolling_update(
+    w: &mut E2eWorld,
+    name: String,
+    max_surge: String,
+    max_unavailable: String,
+) {
+    let mut pg = pg_postgres_config();
+    pg.host = "pg.example.com".into();
+    let spec = ClusterSpec {
+        secure_cookie: None,
+        extra_env: vec![],
+        image_pull_secrets: vec![],
+        binary_data: None,
+        smtp: None,
+        logging: None,
+        community_nodes: None,
+        image: "nginx:alpine".into(),
+        encryption_key: None,
+        database: DatabaseSpec {
+            type_: "postgresdb".into(),
+            sqlite: None,
+            postgres: Some(pg),
+            mysql: None,
+        },
+        redis: RedisConfig {
+            host: "redis.example.com".into(),
+            port: Some(6379),
+            db: None,
+            password_secret: None,
+            username_secret: None,
+            tls: None,
+            prefix: None,
+        },
+        main: MainConfig {
+            extra_env: vec![],
+            replicas: 1,
+            strategy: Some(n8n_rustful_operator::DeploymentStrategy {
+                type_: "RollingUpdate".into(),
+                max_surge: Some(max_surge),
+                max_unavailable: Some(max_unavailable),
+            }),
+            ..Default::default()
+        },
+        workers: WorkerConfig {
+            extra_env: vec![],
+            replicas: 1,
+            image: None,
+            concurrency: None,
+            autoscaling: None,
+            resources: None,
+            pod: None,
+            strategy: None,
+        },
+        webhooks: None,
+    };
+    apply_cluster(w, &name, spec).await;
+}
+
 #[when(regex = r#"^I apply a Cluster "([^"]+)" with sqlite database$"#)]
 async fn apply_cluster_sqlite(w: &mut E2eWorld, name: String) {
     let spec = ClusterSpec {
