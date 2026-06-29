@@ -106,7 +106,7 @@ Feature: n8n operator reconciles Cluster custom resources
     And a Secret "redis-creds" exists with key "password" set to "rs3cret"
     When I apply a Cluster "binfs" with filesystem binary data shared size "1Gi"
     Then a PersistentVolumeClaim named "binfs-binary-data" exists with size "1Gi"
-    And the Deployment "binfs-main" has env var "N8N_BINARY_DATA_STORAGE_PATH" set to "/home/node/binary-data"
+    And the Deployment "binfs-main" has env var "N8N_STORAGE_PATH" set to "/home/node/binary-data"
     And the Deployment "binfs-main" mounts pvc "binfs-binary-data" at "/home/node/binary-data"
     And the Deployment "binfs-worker" mounts pvc "binfs-binary-data" at "/home/node/binary-data"
 
