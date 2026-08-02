@@ -46,7 +46,7 @@ thiserror = "2.0.18"
 anyhow = "1.0.101"
 prometheus-client = "0.25.0"
 jiff = "0.2.28"
-rand = "0.9"
+rand = "0.10"
 hex = "0.4"
 
 [dependencies.kube]
