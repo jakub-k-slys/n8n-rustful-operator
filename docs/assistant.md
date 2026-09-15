@@ -1,13 +1,13 @@
 # Assistant
 
-`Assistant` konfiguruje moduł n8n Assistant (`instance-ai`) dla istniejącego
-`Cluster`-a lub `Single`-a w tym samym namespace i zarządza wymaganym przez
-ten moduł, self-hostowanym stackiem sandboksa (`sandbox-api` +
-`sandbox-runner`, oba z obrazu `ghcr.io/n8n-io/n8n-sandbox-service-api`, plus
-prywatny obraz sandboksa `ghcr.io/n8n-io/n8n-sandbox-service-sandbox`
-uruchamiany per wykonanie).
+`Assistant` configures the n8n Assistant (`instance-ai`) module for an
+existing `Cluster` or `Single` in the same namespace, and manages the
+self-hosted sandbox stack that module requires (`sandbox-api` +
+`sandbox-runner`, both from the `ghcr.io/n8n-io/n8n-sandbox-service-api`
+image, plus the private sandbox image
+`ghcr.io/n8n-io/n8n-sandbox-service-sandbox` started per execution).
 
-## Przykładowy CR
+## Example CR
 
 ```yaml
 apiVersion: n8n.slys.dev/v1
@@ -37,55 +37,53 @@ spec:
         size: 20Gi
 ```
 
-`targetRef` musi wskazywać na CR w tym samym namespace co `Assistant` —
-wygenerowany Secret z konfiguracją `instance-ai` jest właścicielem (owner
-reference) tego CR-a, a referencje właściciela nie mogą przekraczać granic
-namespace'ów.
+`targetRef` must point at a CR in the same namespace as the `Assistant` — the
+generated Secret carrying the `instance-ai` configuration is owned by this
+CR, and an owner reference cannot cross a namespace boundary.
 
-## Wymagania wobec klastra
+## Cluster requirements
 
-- **Namespace sandboksa musi istnieć z góry** i mieć etykietę
-  `pod-security.kubernetes.io/enforce: privileged` — `sandbox-runner`
-  uruchamia uprzywilejowany kontener Docker-in-Docker (DinD), którego Pod
-  Security Standard `restricted`/`baseline` odrzuci. Operator odmawia
-  utworzenia stacku, jeśli namespace nie istnieje, zamiast tworzyć go
-  samodzielnie.
-- Jeśli `sandbox.namespace` różni się od namespace'u `Assistant`-a, **ruch
-  sieciowy między namespace'ami musi być dopuszczony** — domyślny
-  `NetworkPolicy` typu deny-all albo mesh (np. Istio) w trybie STRICT mTLS
-  zablokuje połączenia n8n → `sandbox-api` (HTTP `:8080`, gRPC `:9090`) oraz
-  `sandbox-api` → `sandbox-runner` (control-gRPC `:9091`).
-- Rezerwuj co najmniej **4 GB RAM i 2 vCPU** na sam stack sandboksa
-  (`sandbox-api` + `sandbox-runner` + wewnętrzny Docker) — DinD i wykonywany
-  w nim kod generowany przez model potrafią być zaskakująco żarłoczne.
-- **Żaden port sandboksa nie powinien być wystawiony publicznie** (Ingress,
-  LoadBalancer, HTTPRoute) — `sandbox-api`/`sandbox-runner` nie mają własnej
-  autoryzacji poza współdzielonymi kluczami API i mTLS między sobą; dostęp
-  ma mieć wyłącznie n8n przez `ClusterIP` w tym samym klastrze.
+- **The sandbox namespace must already exist** and carry the label
+  `pod-security.kubernetes.io/enforce: privileged` — `sandbox-runner` runs a
+  privileged Docker-in-Docker (DinD) container, which the `restricted`/
+  `baseline` Pod Security Standard rejects. The operator refuses to create
+  the stack if the namespace doesn't exist, rather than creating it itself.
+- If `sandbox.namespace` differs from the `Assistant`'s own namespace,
+  **cross-namespace network traffic must be allowed** — a default deny-all
+  `NetworkPolicy`, or a mesh (e.g. Istio) in STRICT mTLS mode, will block
+  n8n → `sandbox-api` (HTTP `:8080`, gRPC `:9090`) and `sandbox-api` →
+  `sandbox-runner` (control-gRPC `:9091`).
+- Reserve at least **4 GB RAM and 2 vCPU** for the sandbox stack itself
+  (`sandbox-api` + `sandbox-runner` + the inner Docker daemon) — DinD, and
+  the model-generated code it executes, can be surprisingly hungry.
+- **No sandbox port should be exposed publicly** (Ingress, LoadBalancer,
+  HTTPRoute) — `sandbox-api`/`sandbox-runner` have no authorization of their
+  own beyond the shared API keys and the mTLS between them; only n8n, via
+  `ClusterIP` in the same cluster, should ever reach them.
 
-## Rotacja certyfikatów mTLS
+## mTLS certificate rotation
 
-Stack `sandbox-api`/`sandbox-runner` komunikuje się po mTLS wygenerowanym
-jednorazowo przez Job `bootstrap-mtls.sh`. Job nie jest uruchamiany ponownie,
-dopóki oba Secrety TLS istnieją — a `bootstrap-mtls.sh` zapisuje klucz
-prywatny CA do `/tls/ca.key`, poza dwoma podkatalogami, z których `tlspub`
-kopiuje pliki do Secretów, więc klucz CA nigdy nie trafia do klastra i nie da
-się go odzyskać. Rotacja polega więc na usunięciu obu Secretów TLS — operator
-przy najbliższym reconcile odtworzy Job bootstrapujący nowe CA i certyfikaty:
+The `sandbox-api`/`sandbox-runner` stack talks over mTLS generated once by
+the `bootstrap-mtls.sh` bootstrap `Job`. The Job is not rerun as long as both
+TLS Secrets exist — and `bootstrap-mtls.sh` writes the CA's private key to
+`/tls/ca.key`, outside the two subdirectories `tlspub` copies files from into
+the Secrets, so the CA key never reaches the cluster and can't be recovered.
+Rotation therefore means deleting both TLS Secrets — the operator recreates
+the bootstrap Job with a fresh CA and certificates on the next reconcile:
 
 ```sh
 kubectl delete secret -n <sbx-ns> <prefix>-sandbox-tls-api <prefix>-sandbox-tls-runner
 ```
 
-gdzie `<prefix>` to `<namespace Assistant-a>-<nazwa Assistant-a>` (patrz
-`status.sandboxNamespace`/nazewnictwo obiektów sandboksa). Po usunięciu
-Secretów `sandbox-api` i `sandbox-runner` będą działać na starych
-certyfikatach do restartu Podów — zrestartuj oba Deploymenty, gdy nowe
-certyfikaty się pojawią.
+where `<prefix>` is `<Assistant's namespace>-<Assistant's name>` (see
+`status.sandboxNamespace`/the sandbox object naming). After the Secrets are
+deleted, `sandbox-api` and `sandbox-runner` keep running on their old
+certificates until their Pods restart — restart both Deployments once the
+new certificates appear.
 
-## Weryfikacja
+## Verification
 
-Sprawdź zdrowie `sandbox-api`:
+Check `sandbox-api`'s health:
 
 ```sh
 kubectl exec -n <sbx-ns> deploy/<prefix>-sandbox-api -- \
@@ -93,12 +91,12 @@ kubectl exec -n <sbx-ns> deploy/<prefix>-sandbox-api -- \
 # {"status":"ok"}
 ```
 
-Potwierdź, że runner się zarejestrował, przeglądając logi `sandbox-api`:
+Confirm the runner has registered by checking `sandbox-api`'s logs:
 
 ```sh
 kubectl logs -n <sbx-ns> deploy/<prefix>-sandbox-api | grep -i runner
 ```
 
-Status samego CR-a (`ready`, `certsReady`, `apiReady`, `runnerReady`,
-`targetSecret`, `sandboxNamespace`) pokazuje `kubectl get assistant -n
+The CR's own status (`ready`, `certsReady`, `apiReady`, `runnerReady`,
+`targetSecret`, `sandboxNamespace`) is visible via `kubectl get assistant -n
 <namespace> <name> -o yaml`.
