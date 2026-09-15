@@ -187,6 +187,12 @@ pub struct AssistantStatus {
     pub runner_ready: bool,
     #[serde(skip_serializing_if = "Option::is_none", rename = "targetSecret")]
     pub target_secret: Option<String>,
+    /// The sandbox namespace the stack was actually built in. Pinned once the
+    /// stack exists — `apply` refuses a later `spec.sandbox.namespace` change
+    /// rather than orphaning the old privileged stack (it has no
+    /// ownerReference and isn't cleaned up by any namespace but this one).
+    #[serde(skip_serializing_if = "Option::is_none", rename = "sandboxNamespace")]
+    pub sandbox_namespace: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }

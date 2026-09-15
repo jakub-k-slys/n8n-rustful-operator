@@ -3,7 +3,7 @@ use crate::{
     builders::{
         sandbox_names::{SandboxNames, sandbox_labels},
         sandbox_workloads::{
-            build_docker_pvc, build_sandbox_api, build_sandbox_runner, build_sandbox_service,
+            build_docker_pvc, build_sandbox_api, build_sandbox_runner, build_sandbox_service, docker_pvc_name,
         },
     },
     env::instance_ai::build_instance_ai_data,
@@ -49,6 +49,10 @@ pub async fn apply(a: &Assistant, ctx: Arc<Context>) -> Result<Action> {
 
     validate_assistant(a, &ns)?;
     let sbx_ns = a.spec.sandbox_namespace(&ns);
+    check_namespace_pinned(
+        a.status.as_ref().and_then(|s| s.sandbox_namespace.as_deref()),
+        &sbx_ns,
+    )?;
     if Api::<Namespace>::all(client.clone())
         .get_opt(&sbx_ns)
         .await
@@ -86,7 +90,7 @@ pub async fn apply(a: &Assistant, ctx: Arc<Context>) -> Result<Action> {
     let svcs: Api<Service> = Api::namespaced(client.clone(), &sbx_ns);
     if let Some(pvc) = build_docker_pvc(&names, &a.spec, &ns, &name, &sbx_ns) {
         Api::<PersistentVolumeClaim>::namespaced(client.clone(), &sbx_ns)
-            .patch(&format!("{}-docker", names.runner), &patch, &Patch::Apply(&pvc))
+            .patch(&docker_pvc_name(&names), &patch, &Patch::Apply(&pvc))
             .await
             .map_err(Error::KubeError)?;
     }
@@ -195,23 +199,48 @@ pub async fn apply(a: &Assistant, ctx: Arc<Context>) -> Result<Action> {
     let runner_dep = deps.get_opt(&names.runner).await.map_err(Error::KubeError)?;
     let api_ready = is_ready(api_dep.as_ref());
     let runner_ready = is_ready(runner_dep.as_ref());
+    let ready = api_ready && runner_ready;
     let message = failure_message(api_dep.as_ref()).or_else(|| failure_message(runner_dep.as_ref()));
     patch_status(
         &client,
         &ns,
         &name,
         AssistantStatus {
-            ready: api_ready && runner_ready,
+            ready,
             certs_ready: true,
             api_ready,
             runner_ready,
             target_secret: Some(names.target_secret.clone()),
+            sandbox_namespace: Some(sbx_ns.clone()),
             message,
         },
         &patch,
     )
     .await?;
-    Ok(Action::requeue(Duration::from_secs(5 * 60)))
+    // No watch is possible on the sandbox Deployments — they carry no
+    // ownerReference and live in another namespace — so this requeue is the
+    // only way a Pod-Security rejection (surfaced via `failure_message`
+    // above) gets picked up. Requeue soon while not ready so the operator
+    // notices quickly instead of leaving the failure invisible for 5 minutes.
+    let delay = if ready { 5 * 60 } else { 15 };
+    Ok(Action::requeue(Duration::from_secs(delay)))
+}
+
+/// Refuse a `spec.sandbox.namespace` edit once the stack has been built
+/// somewhere: moving it would mean tearing down mTLS and both workloads, and
+/// the old, unlabelled-by-the-new-namespace stack has no ownerReference and
+/// no reaper once `cleanup` starts looking in the new namespace instead.
+/// Deleting and recreating the `Assistant` is the safe path — the finalizer
+/// cleans up the old namespace before the CR is gone.
+fn check_namespace_pinned(recorded: Option<&str>, computed: &str) -> Result<()> {
+    match recorded {
+        Some(r) if r != computed => Err(Error::IllegalAssistant(format!(
+            "sandbox.namespace changed from {r:?} to {computed:?}; the sandbox stack already \
+             exists in {r:?} and moving it would orphan a privileged pod. Delete and recreate \
+             this Assistant instead — deleting runs the finalizer, which cleans up {r:?} properly."
+        ))),
+        _ => Ok(()),
+    }
 }
 
 async fn read_key(client: &kube::Client, ns: &str, r: Option<&SecretKeyRef>) -> Result<Option<String>> {
@@ -228,4 +257,27 @@ async fn read_key(client: &kube::Client, ns: &str, r: Option<&SecretKeyRef>) -> 
     Ok(Some(String::from_utf8(raw.0.clone()).map_err(|e| {
         Error::IllegalAssistant(format!("Secret {:?} key {:?} is not UTF-8: {e}", r.name, r.key))
     })?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_recorded_namespace_passes() {
+        assert!(check_namespace_pinned(None, "n8n-sandbox").is_ok());
+    }
+
+    #[test]
+    fn a_matching_recorded_namespace_passes() {
+        assert!(check_namespace_pinned(Some("n8n-sandbox"), "n8n-sandbox").is_ok());
+    }
+
+    #[test]
+    fn a_changed_namespace_is_rejected_naming_both() {
+        let err = check_namespace_pinned(Some("n8n-sandbox"), "n8n-sandbox-2").unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("n8n-sandbox"));
+        assert!(msg.contains("n8n-sandbox-2"));
+    }
 }

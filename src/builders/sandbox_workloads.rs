@@ -159,7 +159,7 @@ pub fn build_sandbox_api(
     )
 }
 
-fn docker_pvc_name(names: &SandboxNames) -> String {
+pub(crate) fn docker_pvc_name(names: &SandboxNames) -> String {
     format!("{}-docker", names.runner)
 }
 

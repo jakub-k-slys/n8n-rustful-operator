@@ -2,9 +2,11 @@ use crate::{Error, Result, spec::Assistant};
 use kube::ResourceExt;
 
 const PROVIDERS: &[&str] = &["anthropic", "openai", "openrouter"];
-/// Longest generated object name is the runner Service; Service names are
-/// capped at 63 characters by the apiserver.
-const NAME_SUFFIX: &str = "-sandbox-runner-1";
+/// Longest generated object name is the runner's Docker-storage PVC (created
+/// only when `sandbox.runner.dockerStorage.persistence` is set) — longer than
+/// the runner Service/Deployment name it's derived from. Names are capped at
+/// 63 characters by the apiserver.
+const NAME_SUFFIX: &str = "-sandbox-runner-1-docker";
 const MAX_NAME: usize = 63;
 
 /// `SecretKeyRef::key` defaults to `encryption_key` because the struct was
@@ -71,7 +73,7 @@ pub fn validate_assistant(a: &Assistant, cr_ns: &str) -> Result<()> {
     let longest = format!("{cr_ns}-{}{NAME_SUFFIX}", a.name_any()).len();
     if longest > MAX_NAME {
         return Err(Error::IllegalAssistant(format!(
-            "generated Service name would be {longest} characters, over the {MAX_NAME} limit; \
+            "the longest generated object name would be {longest} characters, over the {MAX_NAME} limit; \
              shorten the Assistant name or its namespace"
         )));
     }
@@ -181,17 +183,17 @@ mod tests {
     }
 
     #[test]
-    fn rejects_names_that_would_overflow_the_service_name_limit() {
-        // "<ns>-<name>-sandbox-runner-1" must fit in 63 characters.
-        let long = "a".repeat(45);
+    fn rejects_names_that_would_overflow_the_docker_pvc_name_limit() {
+        // "<ns>-<name>-sandbox-runner-1-docker" must fit in 63 characters.
+        let long = "a".repeat(28);
         let err = validate_assistant(&assistant(&long, base_spec()), "n8n-cluster").unwrap_err();
         assert!(format!("{err}").contains("63"));
     }
 
     #[test]
     fn accepts_a_name_that_exactly_fits() {
-        // 63 - len("n8n-cluster-") - len("-sandbox-runner-1") = 34
-        let name = "a".repeat(34);
+        // 63 - len("n8n-cluster-") - len("-sandbox-runner-1-docker") = 27
+        let name = "a".repeat(27);
         assert!(validate_assistant(&assistant(&name, base_spec()), "n8n-cluster").is_ok());
     }
 

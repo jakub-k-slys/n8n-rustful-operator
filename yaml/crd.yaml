@@ -2090,6 +2090,14 @@ spec:
                 type: boolean
               runnerReady:
                 type: boolean
+              sandboxNamespace:
+                description: |-
+                  The sandbox namespace the stack was actually built in. Pinned once the
+                  stack exists — `apply` refuses a later `spec.sandbox.namespace` change
+                  rather than orphaning the old privileged stack (it has no
+                  ownerReference and isn't cleaned up by any namespace but this one).
+                nullable: true
+                type: string
               targetSecret:
                 nullable: true
                 type: string
