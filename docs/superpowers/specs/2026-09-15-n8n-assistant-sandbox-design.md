@@ -173,6 +173,24 @@ SANDBOX_API_RUNNER_API_KEY            = SANDBOX_RUNNER_API_KEYS
 Każdy sekret występuje w dwóch wariantach nazwy, bo strona API i strona runnera
 używają innych nazw zmiennych dla tej samej wartości.
 
+Secret żyje w namespace sandboxa, a wartość `SANDBOX_API_KEYS` musi trafić do
+`Secret <target>-instance-ai` w namespace targetu. Reconcile czyta ją
+cross-namespace — operator ma `ClusterRole`, więc uprawnienia są.
+
+## Uprawnienia do plików certów
+
+Compose rozwiązuje to przez `chown -R sandbox-api:sandbox-api /tls/api` po
+`bootstrap-mtls.sh`. Przy montowaniu Secreta nie ma gdzie zrobić `chown`, więc
+uprawnienia ustawiamy na wolumenie: `defaultMode: 0440` plus
+`securityContext.fsGroup` równy GID użytkownika z obrazu.
+
+**Otwarta pozycja do domknięcia w implementacji:** UID/GID użytkownika
+`sandbox-api` w obrazie `n8n-sandbox-service-api:1.2.0` nie jest znany z docsów
+— trzeba go odczytać z obrazu (`docker run --rm --entrypoint id <obraz>`) przed
+napisaniem buildera. Jeśli obraz działa jako root, `fsGroup` jest zbędny i
+zostaje samo `defaultMode: 0440`. Nie stosujemy `0444` — klucze prywatne nie
+mają być czytelne dla wszystkich w podzie.
+
 ## Workloady
 
 ### `<p>-sandbox-api`
