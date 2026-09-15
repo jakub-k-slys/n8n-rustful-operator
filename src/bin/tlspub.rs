@@ -7,9 +7,13 @@
 use k8s_openapi::api::core::v1::Secret;
 use kube::{
     Client,
-    api::{Api, ObjectMeta, PostParams},
+    api::{Api, ObjectMeta, Patch, PatchParams},
 };
 use std::{collections::BTreeMap, path::Path};
+
+/// The field manager every SSA write in this operator uses. Must match the
+/// rest of the codebase — see CLAUDE.md's "server-side apply" convention.
+const FIELD_MANAGER: &str = "n8n-rustful-operator";
 
 pub const API_FILES: &[&str] = &[
     "ca.crt",
@@ -85,14 +89,14 @@ fn repeated(args: &[String], name: &str) -> Vec<String> {
         .collect()
 }
 
-async fn publish(
-    api: &Api<Secret>,
+/// Build the Secret object for one side. Pure and testable — no I/O.
+fn build_secret(
     name: &str,
     ns: &str,
     labels: &BTreeMap<String, String>,
     data: BTreeMap<String, String>,
-) -> Result<(), String> {
-    let secret = Secret {
+) -> Secret {
+    Secret {
         metadata: ObjectMeta {
             name: Some(name.to_string()),
             namespace: Some(ns.to_string()),
@@ -102,13 +106,30 @@ async fn publish(
         string_data: Some(data),
         type_: Some("Opaque".to_string()),
         ..Default::default()
-    };
-    match api.create(&PostParams::default(), &secret).await {
-        Ok(_) => Ok(()),
-        // Another run got there first: the desired state already holds.
-        Err(kube::Error::Api(ae)) if ae.code == 409 => Ok(()),
-        Err(e) => Err(format!("creating Secret {name}: {e}")),
     }
+}
+
+async fn publish(
+    api: &Api<Secret>,
+    name: &str,
+    ns: &str,
+    labels: &BTreeMap<String, String>,
+    data: BTreeMap<String, String>,
+) -> Result<(), String> {
+    let secret = build_secret(name, ns, labels, data);
+    // The certs Job's initContainer regenerates the CA on every retry (fresh
+    // emptyDir, backoffLimit: 4), so each attempt must republish a matching
+    // api/runner pair. Server-side apply makes that idempotent and race-free:
+    // a retry simply overwrites whatever the previous attempt left behind,
+    // instead of a create-or-ignore leaving one Secret on a stale CA.
+    api.patch(
+        name,
+        &PatchParams::apply(FIELD_MANAGER).force(),
+        &Patch::Apply(&secret),
+    )
+    .await
+    .map(|_| ())
+    .map_err(|e| format!("applying Secret {name}: {e}"))
 }
 
 #[tokio::main]
@@ -223,5 +244,29 @@ mod tests {
     #[test]
     fn rejects_a_malformed_label() {
         assert!(parse_labels(&["nope".to_string()]).is_err());
+    }
+
+    #[test]
+    fn build_secret_carries_apiversion_kind_and_the_right_content() {
+        let mut labels = BTreeMap::new();
+        labels.insert("app.kubernetes.io/part-of".to_string(), "n8n".to_string());
+        let mut data = BTreeMap::new();
+        data.insert("ca.crt".to_string(), "cert-body".to_string());
+
+        let secret = build_secret("p-sandbox-tls-api", "n8n-sandbox", &labels, data.clone());
+
+        assert_eq!(secret.metadata.name.as_deref(), Some("p-sandbox-tls-api"));
+        assert_eq!(secret.metadata.namespace.as_deref(), Some("n8n-sandbox"));
+        assert_eq!(secret.metadata.labels.as_ref(), Some(&labels));
+        assert_eq!(secret.type_.as_deref(), Some("Opaque"));
+        assert_eq!(secret.string_data, Some(data));
+
+        // apiVersion/kind must be present for the apiserver to accept an SSA
+        // patch — k8s-openapi's Serialize impl injects them unconditionally,
+        // but pin that behaviour down explicitly so a future refactor can't
+        // silently drop it.
+        let json = serde_json::to_value(&secret).unwrap();
+        assert_eq!(json["apiVersion"], "v1");
+        assert_eq!(json["kind"], "Secret");
     }
 }
