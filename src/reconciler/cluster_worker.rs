@@ -61,7 +61,7 @@ pub async fn reconcile_workers(
             resources: c.spec.workers.resources.as_ref(),
             pod: c.spec.workers.pod.as_ref(),
             strategy: c.spec.workers.strategy.as_ref(),
-            instance_ai_revision: None,
+            instance_ai: None,
         },
         ctx.owner,
     );

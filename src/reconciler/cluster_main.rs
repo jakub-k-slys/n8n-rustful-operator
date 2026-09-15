@@ -1,7 +1,7 @@
 use crate::{
     Error, Result,
     builders::{
-        cluster_deployment::{DeploymentInputs, build_cluster_deployment},
+        cluster_deployment::{DeploymentInputs, InstanceAi, build_cluster_deployment},
         destination_rule::{apply_destination_rule, delete_destination_rule},
         service::build_cluster_service,
     },
@@ -94,7 +94,10 @@ pub async fn reconcile_main(
             resources: c.spec.main.resources.as_ref(),
             pod: c.spec.main.pod.as_ref(),
             strategy: c.spec.main.strategy.as_ref(),
-            instance_ai_revision: Some(&instance_ai_revision),
+            instance_ai: Some(InstanceAi {
+                cr_name: cluster_name,
+                revision: &instance_ai_revision,
+            }),
         },
         ctx.owner,
     );
