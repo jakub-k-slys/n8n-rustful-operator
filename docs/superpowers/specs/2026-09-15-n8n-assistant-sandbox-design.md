@@ -184,12 +184,12 @@ Compose rozwiązuje to przez `chown -R sandbox-api:sandbox-api /tls/api` po
 uprawnienia ustawiamy na wolumenie: `defaultMode: 0440` plus
 `securityContext.fsGroup` równy GID użytkownika z obrazu.
 
-**Otwarta pozycja do domknięcia w implementacji:** UID/GID użytkownika
-`sandbox-api` w obrazie `n8n-sandbox-service-api:1.2.0` nie jest znany z docsów
-— trzeba go odczytać z obrazu (`docker run --rm --entrypoint id <obraz>`) przed
-napisaniem buildera. Jeśli obraz działa jako root, `fsGroup` jest zbędny i
-zostaje samo `defaultMode: 0440`. Nie stosujemy `0444` — klucze prywatne nie
-mają być czytelne dla wszystkich w podzie.
+**Zweryfikowane (2026-09-15, obraz `n8n-sandbox-service-api:1.2.0`):**
+`docker run --rm --entrypoint id ghcr.io/n8n-io/n8n-sandbox-service-api:1.2.0`
+zwraca `uid=100(sandbox-api) gid=101(sandbox-api)` — obraz nie działa jako
+root. Zgodnie z regułą decyzyjną powyżej: `fsGroup: 101`, `defaultMode: 0440`.
+Nie stosujemy `0444` — klucze prywatne nie mają być czytelne dla wszystkich
+w podzie.
 
 ## Workloady
 
