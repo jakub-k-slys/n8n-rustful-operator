@@ -7,6 +7,7 @@ pub mod ingress;
 pub mod pvc;
 pub mod sandbox_certs;
 pub mod sandbox_names;
+pub mod sandbox_workloads;
 pub mod service;
 pub mod volumes;
 
