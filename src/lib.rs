@@ -12,11 +12,13 @@ pub use error::{Error, Result};
 pub use metrics::Metrics;
 pub use reconciler::run;
 pub use spec::{
-    Autoscaling, BinaryDataSpec, CLUSTER_FINALIZER, Cluster, ClusterSpec, ClusterStatus,
-    CommunityNodesConfig, CommunityPackage, DatabaseSpec, DatabaseSsl, DeploymentStrategy, EncryptionKeySpec,
-    EnvVar, EnvVarSource, GatewayRef, HttpRouteConfig, IngressConfig, LoggingConfig, MainConfig, MysqlConfig,
+    ASSISTANT_FINALIZER, Assistant, AssistantSpec, AssistantStatus, Autoscaling, BinaryDataSpec, BraveConfig,
+    CLUSTER_FINALIZER, Cluster, ClusterSpec, ClusterStatus, CommunityNodesConfig, CommunityPackage,
+    DatabaseSpec, DatabaseSsl, DeploymentStrategy, DockerStorage, EncryptionKeySpec, EnvVar, EnvVarSource,
+    GatewayRef, HttpRouteConfig, IngressConfig, LoggingConfig, MainConfig, ModelConfig, MysqlConfig,
     NetworkingSpec, PersistenceConfig, PodConfig, PostgresConfig, RedisConfig, ResourceList,
-    ResourceRequirements, S3Config, SINGLE_FINALIZER, SecretKeyRef, ServiceConfig, SharedStorage, Single,
-    SingleSpec, SingleStatus, SmtpAuth, SmtpConfig, SqliteConfig, WebhookConfig, WorkerConfig,
+    ResourceRequirements, S3Config, SINGLE_FINALIZER, SandboxConfig, SandboxRoleConfig, SandboxRunnerConfig,
+    SearchConfig, SearxngConfig, SecretKeyRef, ServiceConfig, SharedStorage, Single, SingleSpec,
+    SingleStatus, SmtpAuth, SmtpConfig, SqliteConfig, TargetRef, WebhookConfig, WorkerConfig,
 };
 pub use state::{Context, Diagnostics, State};
