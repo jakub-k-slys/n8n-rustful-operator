@@ -58,6 +58,16 @@ pub fn image_pull_secrets(names: &[String]) -> Vec<Value> {
     names.iter().map(|n| json!({ "name": n })).collect()
 }
 
+/// Secret the Assistant controller writes for this instance. Declared
+/// `optional` so the Deployment is valid whether or not an Assistant exists,
+/// and so the two controllers never contend for the same field — `env` is an
+/// atomic list in server-side apply and cannot be co-owned.
+pub fn instance_ai_env_from(cr_name: &str) -> Value {
+    json!([{ "secretRef": { "name": format!("{cr_name}-instance-ai"), "optional": true } }])
+}
+
+pub const INSTANCE_AI_REVISION: &str = "n8n.slys.dev/instance-ai-revision";
+
 /// Render a k8s `IntOrString` from the CRD's string field: a purely-numeric
 /// value (e.g. `"1"`) becomes a JSON number (an absolute count), anything else
 /// (e.g. `"25%"`) stays a string. The apiserver rejects a bare-integer string

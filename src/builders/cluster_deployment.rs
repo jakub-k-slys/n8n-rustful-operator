@@ -1,4 +1,7 @@
-use crate::builders::{apply_pod_config, deployment_strategy, image_pull_secrets, resources};
+use crate::builders::{
+    INSTANCE_AI_REVISION, apply_pod_config, deployment_strategy, image_pull_secrets, instance_ai_env_from,
+    resources,
+};
 use crate::labels::{common_annotations, common_labels, selector_labels};
 use crate::spec::{DeploymentStrategy, PodConfig, ResourceRequirements};
 use k8s_openapi::{api::apps::v1::Deployment, apimachinery::pkg::apis::meta::v1::OwnerReference};
@@ -23,6 +26,11 @@ pub struct DeploymentInputs<'a> {
     pub pod: Option<&'a PodConfig>,
     /// Deployment update strategy, if set for this role.
     pub strategy: Option<&'a DeploymentStrategy>,
+    /// `Some(resource_version)` of the `<name>-instance-ai` Secret pulls it
+    /// in via `envFrom` and stamps a revision annotation so a Secret change
+    /// rolls the pods. `None` means this role gets neither — the Assistant
+    /// is editor-side and its module belongs on the main role only.
+    pub instance_ai_revision: Option<&'a str>,
 }
 
 pub fn build_cluster_deployment(input: &DeploymentInputs<'_>, owner: &OwnerReference) -> Deployment {
@@ -46,6 +54,11 @@ pub fn build_cluster_deployment(input: &DeploymentInputs<'_>, owner: &OwnerRefer
     if let Some(r) = input.resources {
         container["resources"] = resources(r);
     }
+    let mut pod_annotations = annotations.clone();
+    if let Some(rev) = input.instance_ai_revision {
+        container["envFrom"] = instance_ai_env_from(input.name);
+        pod_annotations.insert(INSTANCE_AI_REVISION.to_string(), rev.to_string());
+    }
     let mut pod_spec = json!({ "volumes": input.volumes, "containers": [container] });
     if !input.image_pull_secrets.is_empty() {
         pod_spec["imagePullSecrets"] = json!(image_pull_secrets(input.image_pull_secrets));
@@ -53,7 +66,7 @@ pub fn build_cluster_deployment(input: &DeploymentInputs<'_>, owner: &OwnerRefer
     let mut spec = json!({
         "selector": { "matchLabels": selector_labels(input.name) },
         "template": {
-            "metadata": { "labels": labels, "annotations": annotations },
+            "metadata": { "labels": labels, "annotations": pod_annotations },
             "spec": pod_spec,
         }
     });

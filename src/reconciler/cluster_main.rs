@@ -13,7 +13,10 @@ use crate::{
     },
     spec::Cluster,
 };
-use k8s_openapi::api::{apps::v1::Deployment, core::v1::Service};
+use k8s_openapi::api::{
+    apps::v1::Deployment,
+    core::v1::{Secret, Service},
+};
 use kube::api::Patch;
 use serde_json::Value;
 
@@ -70,6 +73,13 @@ pub async fn reconcile_main(
         ),
     ]
     .concat();
+    let instance_ai_revision = ctx
+        .api::<Secret>()
+        .get_opt(&format!("{cluster_name}-instance-ai"))
+        .await
+        .map_err(Error::KubeError)?
+        .and_then(|s| s.metadata.resource_version)
+        .unwrap_or_else(|| "none".to_string());
     let dep = build_cluster_deployment(
         &DeploymentInputs {
             name: &name,
@@ -84,6 +94,7 @@ pub async fn reconcile_main(
             resources: c.spec.main.resources.as_ref(),
             pod: c.spec.main.pod.as_ref(),
             strategy: c.spec.main.strategy.as_ref(),
+            instance_ai_revision: Some(&instance_ai_revision),
         },
         ctx.owner,
     );
