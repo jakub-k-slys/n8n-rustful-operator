@@ -1,6 +1,6 @@
 use crate::{
-    reconciler::{cluster, single},
-    spec::{Cluster, Single},
+    reconciler::{assistant, cluster, single},
+    spec::{Assistant, Cluster, Single},
     state::State,
 };
 use futures::StreamExt;
@@ -24,7 +24,13 @@ pub async fn run(state: State) {
         error!("Cluster CRD is not queryable; {e:?}. Is it installed?");
         std::process::exit(1);
     }
+    let assistants = Api::<Assistant>::all(client.clone());
+    if let Err(e) = assistants.list(&ListParams::default().limit(1)).await {
+        error!("Assistant CRD is not queryable; {e:?}. Is it installed?");
+        std::process::exit(1);
+    }
     let ctx = state.to_context(client).await;
+    let ctx2 = ctx.clone();
     let single_ctrl = Controller::new(singles, single::watcher_config())
         .shutdown_on_signal()
         .run(single::reconcile, single::error_policy, ctx.clone())
@@ -35,5 +41,10 @@ pub async fn run(state: State) {
         .run(cluster::reconcile, cluster::error_policy, ctx)
         .filter_map(|x| async move { std::result::Result::ok(x) })
         .for_each(|_| futures::future::ready(()));
-    futures::future::join(single_ctrl, cluster_ctrl).await;
+    let assistant_ctrl = Controller::new(assistants, assistant::watcher_config())
+        .shutdown_on_signal()
+        .run(assistant::reconcile, assistant::error_policy, ctx2)
+        .filter_map(|x| async move { std::result::Result::ok(x) })
+        .for_each(|_| futures::future::ready(()));
+    futures::future::join3(single_ctrl, cluster_ctrl, assistant_ctrl).await;
 }

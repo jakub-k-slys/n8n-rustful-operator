@@ -1,4 +1,7 @@
+pub mod assistant;
+pub mod assistant_apply;
 pub mod assistant_certs;
+pub mod assistant_status;
 pub mod assistant_validate;
 pub mod cluster;
 pub mod cluster_apply;
