@@ -1,3 +1,4 @@
+pub mod assistant_validate;
 pub mod cluster;
 pub mod cluster_apply;
 pub mod cluster_main;
