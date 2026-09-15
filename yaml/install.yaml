@@ -15,20 +15,34 @@ metadata:
   name: n8n-rustful-operator
 rules:
   - apiGroups: ["n8n.slys.dev"]
-    resources: ["singles", "singles/status", "singles/finalizers", "clusters", "clusters/status", "clusters/finalizers"]
+    resources: ["singles", "singles/status", "singles/finalizers", "clusters", "clusters/status", "clusters/finalizers", "assistants", "assistants/status", "assistants/finalizers"]
     verbs: ["get", "list", "watch", "patch", "update"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete", "deletecollection"]
   - apiGroups: [""]
     resources: ["services"]
-    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete", "deletecollection"]
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete", "deletecollection"]
   - apiGroups: [""]
     resources: ["persistentvolumeclaims"]
-    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete", "deletecollection"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete", "deletecollection"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete", "deletecollection"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete", "deletecollection"]
+  # Read-only: the Assistant controller refuses to proceed when the sandbox
+  # namespace is absent, rather than creating a stack nobody can admit.
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]
     verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
@@ -87,6 +101,8 @@ spec:
           env:
             - name: RUST_LOG
               value: info,kube=info,n8n_rustful_operator=info
+            - name: OPERATOR_IMAGE
+              value: ghcr.io/jakub-k-slys/n8n-rustful-operator:__IMAGE_TAG__
           readinessProbe:
             httpGet: { path: /health, port: http }
             periodSeconds: 5

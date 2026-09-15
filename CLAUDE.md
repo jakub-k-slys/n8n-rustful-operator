@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Kubernetes operator written in Rust on top of `kube-rs` (v3). It reconciles two custom
+Kubernetes operator written in Rust on top of `kube-rs` (v3). It reconciles three custom
 resources in the group `n8n.slys.dev` (v1, namespaced) into running n8n deployments:
 
 - `Single` (kind `Single`, shortname `n8n`, plural `singles`) — one standalone n8n process:
@@ -13,6 +13,12 @@ resources in the group `n8n.slys.dev` (v1, namespaced) into running n8n deployme
 - `Cluster` (kind `Cluster`, shortname `n8nc`, plural `clusters`) — n8n in **queue mode**:
   separate `main`, `worker` and (optional) `webhook` roles backed by a shared database and
   Redis, with optional HPA-driven worker autoscaling.
+- `Assistant` (kind `Assistant`, shortname `n8na`, plural `assistants`) — configures the n8n
+  Assistant (`instance-ai`) module for a `Single`/`Cluster` in the same namespace, and owns
+  the self-hosted sandbox stack the module requires: a `sandbox-api` and `sandbox-runner`
+  `Deployment`+`Service` pair (mTLS-bootstrapped via a one-shot `Job`), plus the
+  target-instance `Secret`. See `docs/assistant.md` for cluster requirements, cert rotation
+  and verification.
 
 Every child object is created with server-side apply (field manager `n8n-rustful-operator`),
 owned by the parent CR, and the operator patches the resource's `.status` back. Scaffold is
@@ -37,13 +43,13 @@ just build-otel       # same, with the telemetry feature
 Run a single test: `cargo test <name>` (or `cargo test --lib <name> -- --ignored` for ignored ones).
 The BDD suite is a separate test target — see **Testing** below.
 
-Both CRDs must exist in the cluster before `just run` — the controller calls `list` on
-`Single` and `Cluster` at startup and `exit(1)`s if either API is not registered. Always
-`just generate && just install-crd` after editing any spec/status type.
+All three CRDs must exist in the cluster before `just run` — the controller calls `list` on
+`Single`, `Cluster` and `Assistant` at startup and `exit(1)`s if any API is not registered.
+Always `just generate && just install-crd` after editing any spec/status type.
 
 ## Architecture
 
-Single crate, two binaries, one library. The reconciler, CRD spec, child-object builders,
+Single crate, three binaries, one library. The reconciler, CRD spec, child-object builders,
 env wiring and metrics each live in their own module tree (the controller was originally one
 `controller.rs` file; it has since been split per-concern).
 
@@ -68,8 +74,13 @@ env wiring and metrics each live in their own module tree (the controller was or
 - `src/telemetry.rs` — `tracing` subscriber with an `EnvFilter` reload handle (lets
   `PUT /log-level` rewrite the filter at runtime). OTLP/gRPC tracer is gated behind the
   `telemetry` feature.
-- `src/crdgen.rs` — second binary; prints the CRD YAML for both `Single::crd()` and
-  `Cluster::crd()`.
+- `src/crdgen.rs` — second binary; prints the CRD YAML for `Single::crd()`, `Cluster::crd()`
+  and `Assistant::crd()`.
+- `src/bin/tlspub.rs` — third binary; the sandbox certs `Job`'s `tlspub` container. Reads the
+  `bootstrap-mtls.sh` output directory and publishes the whitelisted files as the two TLS
+  `Secret`s (`<prefix>-sandbox-tls-api`/`-tls-runner`) — the CA private key
+  (`bootstrap-mtls.sh`'s `/tls/ca.key`) lives outside the directories it copies from and so
+  never reaches a `Secret`.
 
 ### `src/spec/` — the CRD types
 
@@ -77,6 +88,13 @@ One module per concern, all re-exported from `spec::*`:
 
 - `single.rs` — `Single` / `SingleSpec` / `SingleStatus`, `SINGLE_FINALIZER`, `default_image`.
 - `cluster.rs` — `Cluster` / `ClusterSpec` / `ClusterStatus`, `CLUSTER_FINALIZER`.
+- `assistant.rs` — `Assistant` / `AssistantSpec` / `AssistantStatus`, `ASSISTANT_FINALIZER`.
+  `AssistantSpec` carries `targetRef` (`Cluster`/`Single`, same namespace), `model`
+  (`provider/model` + optional `apiKeySecret`/`url`), optional `search` (`brave`/`searxng`),
+  and `sandbox` (`SandboxConfig`: optional namespace override, image versions, per-role
+  `SandboxRoleConfig`/`SandboxRunnerConfig` incl. `dockerStorage`). `AssistantStatus` adds
+  `certsReady`/`apiReady`/`runnerReady`, `targetSecret`, and `sandboxNamespace` (pinned once
+  the stack exists — see `assistant_apply.rs`).
 - `roles.rs` — `MainConfig`, `WorkerConfig`, `WebhookConfig`, `Autoscaling` (the per-role
   config for a `Cluster`).
 - `database.rs` — `DatabaseSpec` (`type` ∈ `sqlite`/`postgresdb`/`mysqldb`/`mariadb`),
@@ -107,8 +125,8 @@ kube-derive would mis-pluralize. The finalizer strings mirror the CRD names
 
 ### `src/reconciler/` — the control loop
 
-- `run.rs` (`run`) — creates the client, verifies both CRDs are queryable, then starts two
-  `Controller`s (`Single` and `Cluster`) joined with `futures::future::join`.
+- `run.rs` (`run`) — creates the client, verifies all three CRDs are queryable, then starts
+  three `Controller`s (`Single`, `Cluster`, `Assistant`) joined with `futures::future::join3`.
 - `single.rs` / `cluster.rs` — each defines `watcher_config`, `reconcile` (wraps the apply
   in `kube::runtime::finalizer`, so cleanup runs on delete), `error_policy`, and `cleanup`
   (publishes a `DeleteRequested` event).
@@ -136,6 +154,25 @@ kube-derive would mis-pluralize. The finalizer strings mirror the CRD names
 - `networking.rs` — `reconcile_role_networking`: provisions/garbage-collects the `Ingress`
   or `HTTPRoute` for a role, including removing it when the spec drops `networking`.
 - `single_status.rs` / `cluster_status.rs` — `patch_status` via SSA.
+- `assistant.rs` — `watcher_config`, `reconcile` (finalizer-wrapped), `error_policy`, and
+  `cleanup`: the sandbox stack lives in its own (possibly different) namespace with no
+  ownerReference — a cross-namespace owner would make the GC treat the children as orphans —
+  so `cleanup` finds and `delete_collection`s every kind by `sandbox_selector` label instead.
+- `assistant_apply.rs` (`apply`, `operator_image`) — validates, refuses to proceed if the
+  sandbox namespace doesn't exist or `spec.sandbox.namespace` changed after the stack was
+  built (`check_namespace_pinned`), reads the operator's own image from `OPERATOR_IMAGE` for
+  the certs `Job`, applies the `sandbox-api`/`sandbox-runner` `Deployment`+`Service` pair and
+  the target-instance `Secret`, and patches `.status`.
+- `assistant_certs.rs` — `ensure_sandbox_secrets` (create-once shared API/registration keys)
+  and `ensure_certs`: SSA-applies the certs Job's `ServiceAccount`/`Role`/`RoleBinding` (kept
+  under SSA so out-of-band drift on that privileged-namespace Role self-heals), then
+  create-if-absent's the bootstrap `Job` (its `spec.template` is immutable, so SSA would fail
+  a real change) only while both TLS `Secret`s are missing.
+- `assistant_validate.rs` — `validate_assistant`: `targetRef.kind` ∈ `Cluster`/`Single`,
+  `model.name` in `provider/model` form for a known provider, generated-name length under the
+  63-char apiserver cap.
+- `assistant_status.rs` — `is_ready`/`failure_message` (surfaces a `ReplicaFailure` condition,
+  most often Pod Security rejecting the privileged runner) and `patch_status`.
 
 ### `src/builders/` — pure object constructors
 
@@ -213,6 +250,10 @@ identical in both feature configurations.
 
 `yaml/install.yaml` bundles the Namespace, ServiceAccount, RBAC (ClusterRole/Binding) and the
 operator Deployment (image `ghcr.io/jakub-k-slys/n8n-rustful-operator`, `__IMAGE_TAG__`
-placeholder). The ClusterRole grants the operator the verbs it needs on `singles`/`clusters`
-(+ `/status`, `/finalizers`), Deployments, Services, Secrets, PVCs, Ingresses, HTTPRoutes,
-HPAs and Events. Apply the CRDs (`just install-crd`) before `install.yaml`.
+placeholder, also injected into the container's `OPERATOR_IMAGE` env var — `assistant_apply`'s
+`operator_image()` reads it for the certs `Job`'s `tlspub` container). The ClusterRole grants
+the operator the verbs it needs on `singles`/`clusters`/`assistants` (+ `/status`,
+`/finalizers`), Deployments, Services, Secrets, PVCs, Jobs, ServiceAccounts, Roles,
+RoleBindings (incl. `deletecollection` — the `Assistant` finalizer bulk-deletes the sandbox
+stack by label), read-only Namespaces (the sandbox namespace must pre-exist), Ingresses,
+HTTPRoutes, HPAs and Events. Apply the CRDs (`just install-crd`) before `install.yaml`.
