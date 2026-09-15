@@ -19,6 +19,11 @@ doc = false
 name = "crdgen"
 path = "src/crdgen.rs"
 
+[[bin]]
+doc = false
+name = "tlspub"
+path = "src/bin/tlspub.rs"
+
 [lib]
 name = "n8n_rustful_operator"
 path = "src/lib.rs"
