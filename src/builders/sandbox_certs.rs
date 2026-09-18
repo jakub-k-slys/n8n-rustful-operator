@@ -49,7 +49,7 @@ pub fn build_certs_rbac(
         "rules": [{
             "apiGroups": [""],
             "resources": ["secrets"],
-            "verbs": ["get", "create"],
+            "verbs": ["create", "patch"],
         }],
     });
     let rb = json!({
@@ -214,7 +214,7 @@ mod tests {
     }
 
     #[test]
-    fn rbac_grants_only_secret_get_and_create() {
+    fn rbac_grants_only_secret_create_and_patch() {
         let (sa, role, rb) = build_certs_rbac(&names(), "n8n-cluster", "n8n", "n8n-sandbox");
         assert_eq!(sa.metadata.name.as_deref(), Some("n8n-cluster-n8n-sandbox-certs"));
         let rules = role.rules.unwrap();
@@ -222,7 +222,7 @@ mod tests {
         assert_eq!(rules[0].resources.as_ref().unwrap(), &vec!["secrets".to_string()]);
         let mut verbs = rules[0].verbs.clone();
         verbs.sort();
-        assert_eq!(verbs, vec!["create".to_string(), "get".to_string()]);
+        assert_eq!(verbs, vec!["create".to_string(), "patch".to_string()]);
         assert_eq!(rb.subjects.unwrap()[0].name, "n8n-cluster-n8n-sandbox-certs");
     }
 }
