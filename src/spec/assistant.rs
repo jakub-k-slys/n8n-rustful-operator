@@ -115,7 +115,7 @@ pub struct SandboxRoleConfig {
     pub pod: Option<PodConfig>,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, JsonSchema)]
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
 pub struct SandboxRunnerConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resources: Option<ResourceRequirements>,
@@ -124,16 +124,6 @@ pub struct SandboxRunnerConfig {
     /// Backing store for the runner's inner Docker (`/var/lib/docker`).
     #[serde(default, rename = "dockerStorage")]
     pub docker_storage: DockerStorage,
-}
-
-impl Default for SandboxRunnerConfig {
-    fn default() -> Self {
-        Self {
-            resources: None,
-            pod: None,
-            docker_storage: DockerStorage::default(),
-        }
-    }
 }
 
 /// `/var/lib/docker` for the runner. An `emptyDir` with a size limit by

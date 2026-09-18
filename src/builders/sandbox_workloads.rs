@@ -39,17 +39,33 @@ fn selector(cr_ns: &str, cr_name: &str, component: &str) -> Value {
     })
 }
 
-fn deployment(
-    name: &str,
-    sbx_ns: &str,
-    cr_ns: &str,
-    cr_name: &str,
-    component: &str,
-    tls_revision: &str,
+/// Bundled parameters for `deployment`. `name`/`sbx_ns`/`cr_ns`/`cr_name` are
+/// all `&str` and trivially transposable at a call site with no type error;
+/// named fields make that mistake impossible to write by accident.
+struct DeploymentSpec<'a> {
+    name: &'a str,
+    sbx_ns: &'a str,
+    cr_ns: &'a str,
+    cr_name: &'a str,
+    component: &'a str,
+    tls_revision: &'a str,
     container: Value,
     volumes: Vec<Value>,
-    pod_cfg: Option<&crate::spec::PodConfig>,
-) -> Deployment {
+    pod_cfg: Option<&'a crate::spec::PodConfig>,
+}
+
+fn deployment(spec: DeploymentSpec) -> Deployment {
+    let DeploymentSpec {
+        name,
+        sbx_ns,
+        cr_ns,
+        cr_name,
+        component,
+        tls_revision,
+        container,
+        volumes,
+        pod_cfg,
+    } = spec;
     let labels = sandbox_labels(cr_ns, cr_name, component);
     let mut annotations = common_annotations();
     annotations.insert("n8n.slys.dev/tls-revision".to_string(), tls_revision.to_string());
@@ -146,17 +162,17 @@ pub fn build_sandbox_api(
         "name": "tls",
         "secret": { "secretName": names.tls_api, "defaultMode": TLS_MODE }
     })];
-    deployment(
-        &names.api,
+    deployment(DeploymentSpec {
+        name: &names.api,
         sbx_ns,
         cr_ns,
         cr_name,
-        "sandbox-api",
+        component: "sandbox-api",
         tls_revision,
         container,
         volumes,
-        spec.sandbox.api.pod.as_ref(),
-    )
+        pod_cfg: spec.sandbox.api.pod.as_ref(),
+    })
 }
 
 pub(crate) fn docker_pvc_name(names: &SandboxNames) -> String {
@@ -225,17 +241,17 @@ pub fn build_sandbox_runner(
         }),
         docker_volume,
     ];
-    deployment(
-        &names.runner,
+    deployment(DeploymentSpec {
+        name: &names.runner,
         sbx_ns,
         cr_ns,
         cr_name,
-        "sandbox-runner",
+        component: "sandbox-runner",
         tls_revision,
         container,
         volumes,
-        spec.sandbox.runner.pod.as_ref(),
-    )
+        pod_cfg: spec.sandbox.runner.pod.as_ref(),
+    })
 }
 
 pub fn build_docker_pvc(
