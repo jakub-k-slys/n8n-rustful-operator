@@ -50,6 +50,7 @@ pub async fn reconcile_webhooks(
             resources: wh.resources.as_ref(),
             pod: wh.pod.as_ref(),
             strategy: wh.strategy.as_ref(),
+            instance_ai: None,
         },
         ctx.owner,
     );

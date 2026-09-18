@@ -33,6 +33,9 @@ pub enum Error {
 
     #[error("IllegalStrategy: {0}")]
     IllegalStrategy(String),
+
+    #[error("IllegalAssistant: {0}")]
+    IllegalAssistant(String),
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;

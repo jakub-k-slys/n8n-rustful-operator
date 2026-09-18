@@ -5,7 +5,6 @@ metadata:
 spec:
   group: n8n.slys.dev
   names:
-    categories: []
     kind: Single
     plural: singles
     shortNames:
@@ -13,8 +12,7 @@ spec:
     singular: single
   scope: Namespaced
   versions:
-  - additionalPrinterColumns: []
-    name: v1
+  - name: v1
     schema:
       openAPIV3Schema:
         description: Auto-generated derived type for SingleSpec via `CustomResource`
@@ -586,7 +584,6 @@ metadata:
 spec:
   group: n8n.slys.dev
   names:
-    categories: []
     kind: Cluster
     plural: clusters
     shortNames:
@@ -594,8 +591,7 @@ spec:
     singular: cluster
   scope: Namespaced
   versions:
-  - additionalPrinterColumns: []
-    name: v1
+  - name: v1
     schema:
       openAPIV3Schema:
         description: Auto-generated derived type for ClusterSpec via `CustomResource`
@@ -1765,6 +1761,355 @@ spec:
         required:
         - spec
         title: Cluster
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: assistants.n8n.slys.dev
+spec:
+  group: n8n.slys.dev
+  names:
+    kind: Assistant
+    plural: assistants
+    shortNames:
+    - n8na
+    singular: assistant
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for AssistantSpec via `CustomResource`
+        properties:
+          spec:
+            description: |-
+              `Assistant` configures the n8n Assistant (`instance-ai`) module for a
+              `Cluster` or `Single` in the same namespace, and owns the self-hosted
+              sandbox stack the module requires.
+            properties:
+              model:
+                properties:
+                  apiKeySecret:
+                    description: |-
+                      Provider API key. Required unless `url` points at an endpoint that
+                      needs none.
+                    nullable: true
+                    properties:
+                      key:
+                        default: encryption_key
+                        description: Key within the Secret. Defaults to `encryption_key`.
+                        type: string
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  name:
+                    description: |-
+                      `provider/model`, e.g. `anthropic/claude-opus-4-8`. Providers:
+                      `anthropic`, `openai`, `openrouter`.
+                    type: string
+                  url:
+                    description: Custom OpenAI-compatible endpoint (`N8N_INSTANCE_AI_MODEL_URL`).
+                    nullable: true
+                    type: string
+                required:
+                - name
+                type: object
+              sandbox:
+                default:
+                  api: {}
+                  runner:
+                    dockerStorage:
+                      size: 20Gi
+                  sandboxImage: ghcr.io/n8n-io/n8n-sandbox-service-sandbox:latest
+                  version: 1.2.0
+                properties:
+                  api:
+                    default: {}
+                    properties:
+                      pod:
+                        description: |-
+                          Pod-level scheduling and metadata applied to a role's pod template. Every
+                          field is optional; omit the whole block to keep the defaults.
+                        nullable: true
+                        properties:
+                          affinity:
+                            description: Free-form pod affinity (k8s `Affinity`), passed through verbatim.
+                            x-kubernetes-preserve-unknown-fields: true
+                          nodeSelector:
+                            additionalProperties:
+                              type: string
+                            nullable: true
+                            type: object
+                          podAnnotations:
+                            additionalProperties:
+                              type: string
+                            description: Extra annotations merged onto the pod template metadata.
+                            nullable: true
+                            type: object
+                          podLabels:
+                            additionalProperties:
+                              type: string
+                            description: Extra labels merged onto the pod template metadata.
+                            nullable: true
+                            type: object
+                          securityContext:
+                            description: |-
+                              Free-form pod security context (k8s `PodSecurityContext`), passed through
+                              verbatim — e.g. `fsGroup` so a mounted PVC is writable by the n8n user
+                              (uid/gid 1000).
+                            x-kubernetes-preserve-unknown-fields: true
+                          serviceAccountName:
+                            description: |-
+                              ServiceAccount the pods run as (also where image-pull Secrets attached
+                              to the SA are honoured).
+                            nullable: true
+                            type: string
+                          tolerations:
+                            description: Free-form pod tolerations (k8s `[]Toleration`), passed through verbatim.
+                            x-kubernetes-preserve-unknown-fields: true
+                        type: object
+                      resources:
+                        description: |-
+                          Container resource requirements. Mirrors the CPU/memory subset of the k8s
+                          `ResourceRequirements` (the only quantities n8n cares about).
+                        nullable: true
+                        properties:
+                          limits:
+                            nullable: true
+                            properties:
+                              cpu:
+                                description: CPU quantity, e.g. `500m` or `1`.
+                                nullable: true
+                                type: string
+                              memory:
+                                description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                                nullable: true
+                                type: string
+                            type: object
+                          requests:
+                            nullable: true
+                            properties:
+                              cpu:
+                                description: CPU quantity, e.g. `500m` or `1`.
+                                nullable: true
+                                type: string
+                              memory:
+                                description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                                nullable: true
+                                type: string
+                            type: object
+                        type: object
+                    type: object
+                  namespace:
+                    description: |-
+                      Namespace for the sandbox stack. Defaults to the CR's namespace. Must
+                      carry `pod-security.kubernetes.io/enforce: privileged`.
+                    nullable: true
+                    type: string
+                  runner:
+                    default:
+                      dockerStorage:
+                        size: 20Gi
+                    properties:
+                      dockerStorage:
+                        default:
+                          size: 20Gi
+                        description: Backing store for the runner's inner Docker (`/var/lib/docker`).
+                        properties:
+                          persistence:
+                            nullable: true
+                            properties:
+                              accessMode:
+                                default: ReadWriteOnce
+                                type: string
+                              size:
+                                description: Storage request, e.g. `1Gi`.
+                                type: string
+                              storageClassName:
+                                nullable: true
+                                type: string
+                            required:
+                            - size
+                            type: object
+                          size:
+                            default: 20Gi
+                            description: '`emptyDir.sizeLimit`. Ignored when `persistence` is set.'
+                            type: string
+                        type: object
+                      pod:
+                        description: |-
+                          Pod-level scheduling and metadata applied to a role's pod template. Every
+                          field is optional; omit the whole block to keep the defaults.
+                        nullable: true
+                        properties:
+                          affinity:
+                            description: Free-form pod affinity (k8s `Affinity`), passed through verbatim.
+                            x-kubernetes-preserve-unknown-fields: true
+                          nodeSelector:
+                            additionalProperties:
+                              type: string
+                            nullable: true
+                            type: object
+                          podAnnotations:
+                            additionalProperties:
+                              type: string
+                            description: Extra annotations merged onto the pod template metadata.
+                            nullable: true
+                            type: object
+                          podLabels:
+                            additionalProperties:
+                              type: string
+                            description: Extra labels merged onto the pod template metadata.
+                            nullable: true
+                            type: object
+                          securityContext:
+                            description: |-
+                              Free-form pod security context (k8s `PodSecurityContext`), passed through
+                              verbatim — e.g. `fsGroup` so a mounted PVC is writable by the n8n user
+                              (uid/gid 1000).
+                            x-kubernetes-preserve-unknown-fields: true
+                          serviceAccountName:
+                            description: |-
+                              ServiceAccount the pods run as (also where image-pull Secrets attached
+                              to the SA are honoured).
+                            nullable: true
+                            type: string
+                          tolerations:
+                            description: Free-form pod tolerations (k8s `[]Toleration`), passed through verbatim.
+                            x-kubernetes-preserve-unknown-fields: true
+                        type: object
+                      resources:
+                        description: |-
+                          Container resource requirements. Mirrors the CPU/memory subset of the k8s
+                          `ResourceRequirements` (the only quantities n8n cares about).
+                        nullable: true
+                        properties:
+                          limits:
+                            nullable: true
+                            properties:
+                              cpu:
+                                description: CPU quantity, e.g. `500m` or `1`.
+                                nullable: true
+                                type: string
+                              memory:
+                                description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                                nullable: true
+                                type: string
+                            type: object
+                          requests:
+                            nullable: true
+                            properties:
+                              cpu:
+                                description: CPU quantity, e.g. `500m` or `1`.
+                                nullable: true
+                                type: string
+                              memory:
+                                description: Memory quantity, e.g. `512Mi` or `1Gi`.
+                                nullable: true
+                                type: string
+                            type: object
+                        type: object
+                    type: object
+                  sandboxImage:
+                    default: ghcr.io/n8n-io/n8n-sandbox-service-sandbox:latest
+                    description: Image the runner starts per execution.
+                    type: string
+                  version:
+                    default: 1.2.0
+                    description: Tag for both `n8n-sandbox-service-*` images.
+                    type: string
+                type: object
+              search:
+                description: Optional web search. Brave takes priority over SearXNG when both are set.
+                nullable: true
+                properties:
+                  brave:
+                    nullable: true
+                    properties:
+                      apiKeySecret:
+                        properties:
+                          key:
+                            default: encryption_key
+                            description: Key within the Secret. Defaults to `encryption_key`.
+                            type: string
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - apiKeySecret
+                    type: object
+                  searxng:
+                    nullable: true
+                    properties:
+                      url:
+                        description: URL of an externally-hosted SearXNG with the JSON API enabled.
+                        type: string
+                    required:
+                    - url
+                    type: object
+                type: object
+              targetRef:
+                description: |-
+                  The n8n instance this assistant configures. Must be in the same
+                  namespace — the generated Secret is owned by this CR, and owner
+                  references cannot cross namespaces.
+                properties:
+                  kind:
+                    description: '`Cluster` or `Single`.'
+                    type: string
+                  name:
+                    type: string
+                required:
+                - kind
+                - name
+                type: object
+            required:
+            - model
+            - targetRef
+            type: object
+          status:
+            nullable: true
+            properties:
+              apiReady:
+                type: boolean
+              certsReady:
+                type: boolean
+              message:
+                nullable: true
+                type: string
+              ready:
+                type: boolean
+              runnerReady:
+                type: boolean
+              sandboxNamespace:
+                description: |-
+                  The sandbox namespace the stack was actually built in. Pinned once the
+                  stack exists — `apply` refuses a later `spec.sandbox.namespace` change
+                  rather than orphaning the old privileged stack (it has no
+                  ownerReference and isn't cleaned up by any namespace but this one).
+                nullable: true
+                type: string
+              targetSecret:
+                nullable: true
+                type: string
+            required:
+            - apiReady
+            - certsReady
+            - ready
+            - runnerReady
+            type: object
+        required:
+        - spec
+        title: Assistant
         type: object
     served: true
     storage: true

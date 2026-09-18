@@ -9,4 +9,9 @@ fn main() {
         "{}",
         serde_yaml::to_string(&n8n_rustful_operator::Cluster::crd()).unwrap()
     );
+    println!("---");
+    print!(
+        "{}",
+        serde_yaml::to_string(&n8n_rustful_operator::Assistant::crd()).unwrap()
+    );
 }

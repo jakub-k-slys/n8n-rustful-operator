@@ -34,9 +34,10 @@ compile features="":
     -v $PWD:/volume \
     -w /volume \
     -t clux/muslrust:stable \
-    cargo build --release --features={{features}} --bin n8n-rustful-operator
+    cargo build --release --features={{features}} --bin n8n-rustful-operator --bin tlspub
   mkdir -p dist/linux/amd64
   cp target/x86_64-unknown-linux-musl/release/n8n-rustful-operator dist/linux/amd64/
+  cp target/x86_64-unknown-linux-musl/release/tlspub dist/linux/amd64/
 
 [private]
 _build features="":

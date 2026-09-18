@@ -1,5 +1,6 @@
 pub mod community;
 pub mod database;
+pub mod instance_ai;
 pub mod logging;
 pub mod redis;
 pub mod smtp;

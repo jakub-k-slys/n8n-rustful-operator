@@ -1,7 +1,7 @@
 use crate::{
     builders::{
-        apply_pod_config, deployment_strategy, image_pull_secrets, pvc::build_persistence_volume, resources,
-        volumes::build_db_volumes,
+        INSTANCE_AI_REVISION, apply_pod_config, deployment_strategy, image_pull_secrets,
+        instance_ai_env_from, pvc::build_persistence_volume, resources, volumes::build_db_volumes,
     },
     env::{
         build_user_env, database::build_db_env, host_env, logging::build_logging_env, protocol_for,
@@ -18,6 +18,7 @@ pub fn build_deployment(
     spec: &SingleSpec,
     key_secret: &SecretKeyRef,
     owner: &OwnerReference,
+    instance_ai_revision: &str,
 ) -> Deployment {
     let selector = selector_labels(name);
     let labels = common_labels(name, &spec.image, "workflow-engine");
@@ -63,6 +64,7 @@ pub fn build_deployment(
         "image": spec.image,
         "ports": [{ "containerPort": 5678, "name": "http" }],
         "env": env,
+        "envFrom": instance_ai_env_from(name),
         "volumeMounts": mounts,
         "readinessProbe": {
             "httpGet": { "path": "/healthz", "port": "http" },
@@ -78,6 +80,9 @@ pub fn build_deployment(
         pod_spec["imagePullSecrets"] = json!(image_pull_secrets(&spec.image_pull_secrets));
     }
 
+    let mut pod_annotations = annotations.clone();
+    pod_annotations.insert(INSTANCE_AI_REVISION.to_string(), instance_ai_revision.to_string());
+
     let mut dep_json = json!({
         "apiVersion": "apps/v1",
         "kind": "Deployment",
@@ -91,7 +96,7 @@ pub fn build_deployment(
             "replicas": spec.replicas,
             "selector": { "matchLabels": selector },
             "template": {
-                "metadata": { "labels": labels, "annotations": annotations },
+                "metadata": { "labels": labels, "annotations": pod_annotations },
                 "spec": pod_spec,
             }
         }
@@ -103,4 +108,47 @@ pub fn build_deployment(
         dep_json["spec"]["strategy"] = deployment_strategy(st);
     }
     serde_json::from_value(dep_json).expect("static deployment schema is valid")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::spec::SingleSpec;
+
+    fn key() -> SecretKeyRef {
+        SecretKeyRef {
+            name: "k".into(),
+            key: "encryption_key".into(),
+        }
+    }
+
+    fn owner() -> OwnerReference {
+        OwnerReference {
+            api_version: "n8n.slys.dev/v1".into(),
+            kind: "Single".into(),
+            name: "demo".into(),
+            uid: "u".into(),
+            controller: Some(true),
+            block_owner_deletion: Some(true),
+        }
+    }
+
+    #[test]
+    fn pulls_the_optional_instance_ai_secret() {
+        let d = build_deployment("demo", &SingleSpec::default(), &key(), &owner(), "none");
+        let v = serde_json::to_value(&d).unwrap();
+        let ef = &v["spec"]["template"]["spec"]["containers"][0]["envFrom"][0];
+        assert_eq!(ef["secretRef"]["name"], "demo-instance-ai");
+        assert_eq!(ef["secretRef"]["optional"], true);
+    }
+
+    #[test]
+    fn stamps_the_instance_ai_revision_so_a_secret_change_rolls_pods() {
+        let d = build_deployment("demo", &SingleSpec::default(), &key(), &owner(), "1234");
+        let v = serde_json::to_value(&d).unwrap();
+        assert_eq!(
+            v["spec"]["template"]["metadata"]["annotations"]["n8n.slys.dev/instance-ai-revision"],
+            "1234"
+        );
+    }
 }

@@ -9,13 +9,20 @@ use crate::{
 };
 use k8s_openapi::api::{
     apps::v1::Deployment,
-    core::v1::{PersistentVolumeClaim, Service},
+    core::v1::{PersistentVolumeClaim, Secret, Service},
 };
 use kube::api::Patch;
 
 pub async fn apply_children(s: &Single, key_secret: &SecretKeyRef, ctx: &ApplyCtx<'_>) -> Result<()> {
     let name = kube::ResourceExt::name_any(s);
     let pvc_name = format!("{name}-data");
+    let instance_ai_revision = ctx
+        .api::<Secret>()
+        .get_opt(&format!("{name}-instance-ai"))
+        .await
+        .map_err(Error::KubeError)?
+        .and_then(|s| s.metadata.resource_version)
+        .unwrap_or_else(|| "none".to_string());
     if let Some(pvc) = build_data_pvc(
         &pvc_name,
         &name,
@@ -32,7 +39,13 @@ pub async fn apply_children(s: &Single, key_secret: &SecretKeyRef, ctx: &ApplyCt
         .patch(
             &name,
             ctx.patch,
-            &Patch::Apply(&build_deployment(&name, &s.spec, key_secret, ctx.owner)),
+            &Patch::Apply(&build_deployment(
+                &name,
+                &s.spec,
+                key_secret,
+                ctx.owner,
+                &instance_ai_revision,
+            )),
         )
         .await
         .map_err(Error::KubeError)?;

@@ -1,3 +1,4 @@
+pub mod assistant;
 pub mod cluster;
 pub mod common;
 pub mod community;
@@ -11,6 +12,10 @@ pub mod single;
 pub mod smtp;
 pub mod storage;
 
+pub use assistant::{
+    ASSISTANT_FINALIZER, Assistant, AssistantSpec, AssistantStatus, BraveConfig, DockerStorage, ModelConfig,
+    SandboxConfig, SandboxRoleConfig, SandboxRunnerConfig, SearchConfig, SearxngConfig, TargetRef,
+};
 pub use cluster::{CLUSTER_FINALIZER, Cluster, ClusterSpec, ClusterStatus};
 pub use common::{
     DeploymentStrategy, EncryptionKeySpec, EnvVar, EnvVarSource, PersistenceConfig, ResourceList,
