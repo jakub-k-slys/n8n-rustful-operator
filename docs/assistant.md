@@ -68,8 +68,10 @@ the `bootstrap-mtls.sh` bootstrap `Job`. The Job is not rerun as long as both
 TLS Secrets exist — and `bootstrap-mtls.sh` writes the CA's private key to
 `/tls/ca.key`, outside the two subdirectories `tlspub` copies files from into
 the Secrets, so the CA key never reaches the cluster and can't be recovered.
-Rotation therefore means deleting both TLS Secrets — the operator recreates
-the bootstrap Job with a fresh CA and certificates on the next reconcile:
+Rotation therefore means deleting both TLS Secrets — once the old bootstrap
+Job has finished (succeeded or failed), the operator deletes it and recreates
+it with a fresh CA and certificates on the next reconcile, without waiting
+out its `ttlSecondsAfterFinished`:
 
 ```sh
 kubectl delete secret -n <sbx-ns> <prefix>-sandbox-tls-api <prefix>-sandbox-tls-runner

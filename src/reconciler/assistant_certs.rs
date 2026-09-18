@@ -14,7 +14,7 @@ use k8s_openapi::api::{
 };
 use kube::{
     Client,
-    api::{Api, ObjectMeta, Patch, PatchParams, PostParams},
+    api::{Api, DeleteParams, ObjectMeta, Patch, PatchParams, PostParams},
 };
 use rand::RngCore;
 use std::collections::BTreeMap;
@@ -159,9 +159,41 @@ pub async fn ensure_certs(
     // an SSA carrying a (potentially) changed template would fail outright,
     // and `ttlSecondsAfterFinished` is designed around the Job disappearing
     // and being recreated rather than patched in place.
+    //
+    // But create-if-absent alone would let a finished Job block its own
+    // retry for up to `ttlSecondsAfterFinished` (an hour): the documented
+    // rotation procedure deletes both TLS Secrets and expects the Job to be
+    // recreated on the next reconcile, and the same is true for a Job that
+    // failed out its `backoffLimit`. So a Job that has already finished
+    // (succeeded or failed) is deleted here so the create below rebuilds it
+    // immediately instead of waiting on the TTL. A still-running Job is left
+    // alone — deleting it would abort an in-flight bootstrap for no reason.
+    let jobs: Api<Job> = Api::namespaced(client.clone(), sbx_ns);
+    if let Some(existing) = jobs.get_opt(&names.certs).await.map_err(Error::KubeError)?
+        && job_finished(&existing)
+    {
+        jobs.delete(&names.certs, &DeleteParams::background())
+            .await
+            .map_err(Error::KubeError)?;
+    }
     let job = build_certs_job(names, spec, cr_ns, cr_name, sbx_ns, operator_image);
-    create_if_absent(&Api::<Job>::namespaced(client.clone(), sbx_ns), &names.certs, job).await?;
+    create_if_absent(&jobs, &names.certs, job).await?;
     Ok(None)
+}
+
+/// `true` once the Job has reached a terminal state (its `Complete` or
+/// `Failed` condition is `True`) — i.e. it is no longer going to make
+/// progress on its own and is only sitting around for its
+/// `ttlSecondsAfterFinished` window.
+fn job_finished(j: &Job) -> bool {
+    j.status
+        .as_ref()
+        .and_then(|s| s.conditions.as_ref())
+        .is_some_and(|conds| {
+            conds
+                .iter()
+                .any(|c| matches!(c.type_.as_str(), "Complete" | "Failed") && c.status == "True")
+        })
 }
 
 async fn apply<K>(api: &Api<K>, name: &str, obj: &K) -> Result<()>
@@ -213,5 +245,46 @@ mod tests {
         );
         assert_eq!(d["SANDBOX_API_RUNNER_API_KEY"], d["SANDBOX_RUNNER_API_KEYS"]);
         assert_eq!(d.len(), 6);
+    }
+
+    fn job_with_condition(cond: Option<(&str, &str)>) -> Job {
+        Job {
+            status: Some(k8s_openapi::api::batch::v1::JobStatus {
+                conditions: cond.map(|(t, s)| {
+                    vec![k8s_openapi::api::batch::v1::JobCondition {
+                        type_: t.to_string(),
+                        status: s.to_string(),
+                        ..Default::default()
+                    }]
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_job_with_no_status_is_not_finished() {
+        assert!(!job_finished(&Job::default()));
+    }
+
+    #[test]
+    fn a_running_job_is_not_finished() {
+        assert!(!job_finished(&job_with_condition(None)));
+    }
+
+    #[test]
+    fn a_completed_job_is_finished() {
+        assert!(job_finished(&job_with_condition(Some(("Complete", "True")))));
+    }
+
+    #[test]
+    fn a_failed_job_is_finished() {
+        assert!(job_finished(&job_with_condition(Some(("Failed", "True")))));
+    }
+
+    #[test]
+    fn a_condition_that_is_not_true_yet_is_not_finished() {
+        assert!(!job_finished(&job_with_condition(Some(("Failed", "False")))));
     }
 }
