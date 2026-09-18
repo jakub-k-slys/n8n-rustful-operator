@@ -64,7 +64,16 @@ pub fn error_policy(a: Arc<Assistant>, error: &Error, ctx: Arc<Context>) -> Acti
 async fn cleanup(a: &Assistant, ctx: Arc<Context>) -> Result<Action> {
     let ns = a.namespace().unwrap();
     let name = a.name_any();
-    let sbx_ns = a.spec.sandbox_namespace(&ns);
+    // The status is the record of where the sandbox stack actually lives —
+    // `check_namespace_pinned` refuses a `spec.sandbox.namespace` edit once
+    // the stack exists, but if a user forces one through anyway the spec no
+    // longer points at the stack this CR built. Trust the pinned status and
+    // only fall back to the spec before the stack has ever been created.
+    let sbx_ns = a
+        .status
+        .as_ref()
+        .and_then(|s| s.sandbox_namespace.clone())
+        .unwrap_or_else(|| a.spec.sandbox_namespace(&ns));
     let selector = sandbox_selector(&ns, &name);
     let lp = ListParams::default().labels(&selector);
     let dp = DeleteParams::background();
