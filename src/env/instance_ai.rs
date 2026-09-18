@@ -1,4 +1,5 @@
 use crate::spec::AssistantSpec;
+use k8s_openapi::ByteString;
 use std::collections::BTreeMap;
 
 /// Contents of `Secret <target>-instance-ai`, pulled into the n8n container
@@ -39,6 +40,29 @@ pub fn build_instance_ai_data(
         set("N8N_INSTANCE_AI_SEARXNG_URL", &sx.url);
     }
     d
+}
+
+/// Same contents as [`build_instance_ai_data`], pre-encoded for the Secret's
+/// `data` field.
+///
+/// The Secret is applied with `data` rather than `stringData` so that SSA's
+/// field manager owns the real, stored keys: the apiserver always rewrites
+/// `stringData` into `data` on write, so a manager that applies `stringData`
+/// never owns anything SSA can prune — a key removed from the spec (say
+/// `search.brave`) would live in the running Secret, and hence the n8n pod's
+/// `envFrom`, forever. `ByteString`'s `Serialize` impl already base64-encodes
+/// its bytes, so wrapping the raw UTF-8 bytes here is the whole job.
+pub fn build_instance_ai_secret_data(
+    spec: &AssistantSpec,
+    sandbox_url: &str,
+    sandbox_api_key: &str,
+    model_api_key: Option<&str>,
+    brave_api_key: Option<&str>,
+) -> BTreeMap<String, ByteString> {
+    build_instance_ai_data(spec, sandbox_url, sandbox_api_key, model_api_key, brave_api_key)
+        .into_iter()
+        .map(|(k, v)| (k, ByteString(v.into_bytes())))
+        .collect()
 }
 
 #[cfg(test)]
@@ -125,5 +149,33 @@ mod tests {
         });
         let d = build_instance_ai_data(&s, URL, "k3y", Some("sk"), None);
         assert_eq!(d["N8N_INSTANCE_AI_SEARXNG_URL"], "http://searxng.search.svc:8080");
+    }
+
+    #[test]
+    fn secret_data_omits_the_brave_key_entry_when_there_is_none() {
+        let d = build_instance_ai_secret_data(&spec(), URL, "k3y", Some("sk-ant-x"), None);
+        assert!(!d.contains_key("INSTANCE_AI_BRAVE_SEARCH_API_KEY"));
+    }
+
+    #[test]
+    fn secret_data_base64_encodes_every_value() {
+        let mut s = spec();
+        s.search = Some(SearchConfig {
+            brave: Some(BraveConfig {
+                api_key_secret: SecretKeyRef {
+                    name: "n8n-ai".into(),
+                    key: "BRAVE_API_KEY".into(),
+                },
+            }),
+            searxng: None,
+        });
+        let d = build_instance_ai_secret_data(&s, URL, "k3y", Some("sk-ant-x"), Some("BSA-x"));
+        assert_eq!(d["N8N_ENABLED_MODULES"].0, b"instance-ai");
+        assert_eq!(d["N8N_INSTANCE_AI_MODEL_API_KEY"].0, b"sk-ant-x");
+        assert_eq!(d["INSTANCE_AI_BRAVE_SEARCH_API_KEY"].0, b"BSA-x");
+        // Serializing a ByteString base64-encodes it — assert that's what
+        // reaches the wire, not just the raw bytes it wraps.
+        let json = serde_json::to_value(&d["INSTANCE_AI_BRAVE_SEARCH_API_KEY"]).unwrap();
+        assert_eq!(json, serde_json::Value::String("QlNBLXg=".into()));
     }
 }
