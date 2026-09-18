@@ -6,7 +6,7 @@ use crate::{
             build_docker_pvc, build_sandbox_api, build_sandbox_runner, build_sandbox_service, docker_pvc_name,
         },
     },
-    env::instance_ai::build_instance_ai_data,
+    env::instance_ai::build_instance_ai_secret_data,
     labels::common_annotations,
     reconciler::{
         assistant_certs::{ensure_certs, ensure_sandbox_secrets},
@@ -75,10 +75,7 @@ pub async fn apply(a: &Assistant, ctx: Arc<Context>) -> Result<Action> {
             &client,
             &ns,
             &name,
-            AssistantStatus {
-                message: Some("waiting for the mTLS bootstrap Job".into()),
-                ..Default::default()
-            },
+            waiting_status(&sbx_ns, a.status.as_ref()),
             &patch,
         )
         .await?;
@@ -156,7 +153,13 @@ pub async fn apply(a: &Assistant, ctx: Arc<Context>) -> Result<Action> {
             .map(|b| &b.api_key_secret),
     )
     .await?;
-    let data = build_instance_ai_data(
+    // `data`, not `stringData` — SSA only prunes fields the field manager
+    // owns, and the apiserver always rewrites `stringData` into `data` on
+    // write. Applying `stringData` would leave the manager owning fields
+    // that were never actually stored, so a key removed from the spec (say
+    // `search.brave`) would never be pruned from the live Secret. See
+    // `build_instance_ai_secret_data`.
+    let data = build_instance_ai_secret_data(
         &a.spec,
         &names.api_url(&sbx_ns),
         &keys.api_key,
@@ -172,7 +175,7 @@ pub async fn apply(a: &Assistant, ctx: Arc<Context>) -> Result<Action> {
             annotations: Some(common_annotations()),
             ..Default::default()
         },
-        string_data: Some(data),
+        data: Some(data),
         type_: Some("Opaque".to_string()),
         ..Default::default()
     };
@@ -224,6 +227,24 @@ pub async fn apply(a: &Assistant, ctx: Arc<Context>) -> Result<Action> {
     // notices quickly instead of leaving the failure invisible for 5 minutes.
     let delay = if ready { 5 * 60 } else { 15 };
     Ok(Action::requeue(Duration::from_secs(delay)))
+}
+
+/// Status patched while `ensure_certs` is waiting on the bootstrap Job.
+///
+/// Server-side apply drops any field missing from the patch, so this MUST
+/// still carry `sandbox_namespace` — the documented cert-rotation procedure
+/// (delete both TLS Secrets) re-enters this branch on every reconcile until
+/// the Job finishes, and if the patch omitted the field, SSA would prune the
+/// pin `check_namespace_pinned` depends on out of the live object. Carrying
+/// the CR's existing `target_secret` forward (when it already has one) keeps
+/// it from flickering out of `.status` for the same reason.
+fn waiting_status(sbx_ns: &str, existing: Option<&AssistantStatus>) -> AssistantStatus {
+    AssistantStatus {
+        message: Some("waiting for the mTLS bootstrap Job".into()),
+        sandbox_namespace: Some(sbx_ns.to_string()),
+        target_secret: existing.and_then(|s| s.target_secret.clone()),
+        ..Default::default()
+    }
 }
 
 /// Refuse a `spec.sandbox.namespace` edit once the stack has been built
@@ -279,5 +300,29 @@ mod tests {
         let msg = format!("{err}");
         assert!(msg.contains("n8n-sandbox"));
         assert!(msg.contains("n8n-sandbox-2"));
+    }
+
+    #[test]
+    fn waiting_status_carries_the_sandbox_namespace_pin() {
+        let s = waiting_status("n8n-sandbox", None);
+        assert_eq!(s.sandbox_namespace.as_deref(), Some("n8n-sandbox"));
+        assert!(s.target_secret.is_none());
+    }
+
+    #[test]
+    fn waiting_status_carries_forward_an_existing_target_secret() {
+        let existing = AssistantStatus {
+            target_secret: Some("n8n-cluster-n8n-instance-ai".into()),
+            ..Default::default()
+        };
+        let s = waiting_status("n8n-sandbox", Some(&existing));
+        assert_eq!(s.sandbox_namespace.as_deref(), Some("n8n-sandbox"));
+        assert_eq!(s.target_secret.as_deref(), Some("n8n-cluster-n8n-instance-ai"));
+    }
+
+    #[test]
+    fn waiting_status_with_no_existing_status_has_no_target_secret() {
+        let s = waiting_status("n8n-sandbox", None);
+        assert!(s.target_secret.is_none());
     }
 }
