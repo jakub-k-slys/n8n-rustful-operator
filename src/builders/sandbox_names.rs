@@ -63,7 +63,6 @@ pub fn sandbox_selector(cr_ns: &str, cr_name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::*;
 
     #[test]
     fn derives_every_object_name_from_the_prefix() {
