@@ -109,6 +109,11 @@ jobs:
               yaml/install.yaml | kubectl apply -f -
           kubectl -n n8n-operator rollout status deployment/n8n-rustful-operator --timeout=120s
 
+      - name: Create the privileged sandbox namespace for the Assistant suite
+        run: |
+          kubectl create namespace n8n-sandbox --dry-run=client -o yaml | kubectl apply -f -
+          kubectl label namespace n8n-sandbox pod-security.kubernetes.io/enforce=privileged --overwrite
+
       - name: Install stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 

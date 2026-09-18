@@ -2,19 +2,24 @@ use cucumber::{World, given, then, when};
 use k8s_openapi::api::{
     apps::v1::Deployment,
     autoscaling::v2::HorizontalPodAutoscaler,
-    core::v1::{PersistentVolumeClaim, Secret, Service},
+    batch::v1::Job,
+    core::v1::{Namespace, PersistentVolumeClaim, Secret, Service},
     networking::v1::Ingress,
 };
 use kube::{
     Client,
-    api::{Api, DeleteParams, DynamicObject, GroupVersionKind, ObjectMeta, Patch, PatchParams, ResourceExt},
+    api::{
+        Api, DeleteParams, DynamicObject, GroupVersionKind, ListParams, ObjectMeta, Patch, PatchParams,
+        ResourceExt,
+    },
     discovery::ApiResource,
 };
 use n8n_rustful_operator::{
-    Autoscaling, Cluster, ClusterSpec, DatabaseSpec, DatabaseSsl, EncryptionKeySpec, GatewayRef,
-    HttpRouteConfig, IngressConfig, MainConfig, MysqlConfig, NetworkingSpec, PersistenceConfig,
-    PostgresConfig, RedisConfig, SecretKeyRef, ServiceConfig, Single, SingleSpec, SqliteConfig,
-    WebhookConfig, WorkerConfig,
+    Assistant, AssistantSpec, Autoscaling, Cluster, ClusterSpec, DatabaseSpec, DatabaseSsl,
+    EncryptionKeySpec, GatewayRef, HttpRouteConfig, IngressConfig, MainConfig, ModelConfig, MysqlConfig,
+    NetworkingSpec, PersistenceConfig, PostgresConfig, RedisConfig, SandboxConfig, SecretKeyRef,
+    ServiceConfig, Single, SingleSpec, SqliteConfig, TargetRef, WebhookConfig, WorkerConfig,
+    builders::sandbox_names::sandbox_selector,
 };
 use std::{collections::BTreeMap, time::Duration};
 use tokio::time::{Instant, sleep};
@@ -2594,6 +2599,218 @@ async fn hpa_gone(w: &mut E2eWorld, name: String, secs: u64) {
             api.get_opt(&n).await.unwrap().is_none()
         }
     })
+    .await;
+}
+
+// ----- Assistant -----
+
+#[given(regex = r#"^a privileged namespace "([^"]+)"$"#)]
+async fn privileged_namespace(w: &mut E2eWorld, name: String) {
+    let api: Api<Namespace> = Api::all(w.client().clone());
+    let mut labels = BTreeMap::new();
+    labels.insert(
+        "pod-security.kubernetes.io/enforce".to_string(),
+        "privileged".to_string(),
+    );
+    let ns = Namespace {
+        metadata: ObjectMeta {
+            name: Some(name.clone()),
+            labels: Some(labels),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let ssa = PatchParams::apply("cucumber").force();
+    api.patch(&name, &ssa, &Patch::Apply(&ns))
+        .await
+        .expect("upsert privileged Namespace");
+}
+
+#[when(
+    regex = r#"^I apply an Assistant named "([^"]+)" targeting Cluster "([^"]+)" with sandbox namespace "([^"]+)" using model key secret "([^"]+)" key "([^"]+)"$"#
+)]
+async fn apply_assistant(
+    w: &mut E2eWorld,
+    name: String,
+    target: String,
+    sandbox_ns: String,
+    secret: String,
+    key: String,
+) {
+    let spec = AssistantSpec {
+        target_ref: TargetRef {
+            kind: "Cluster".to_string(),
+            name: target,
+        },
+        model: ModelConfig {
+            name: "anthropic/claude-opus-4-8".to_string(),
+            api_key_secret: Some(SecretKeyRef { name: secret, key }),
+            url: None,
+        },
+        search: None,
+        sandbox: SandboxConfig {
+            namespace: Some(sandbox_ns),
+            ..SandboxConfig::default()
+        },
+    };
+    let api: Api<Assistant> = Api::namespaced(w.client().clone(), NS);
+    let a = Assistant::new(&name, spec);
+    let ssa = PatchParams::apply("cucumber").force();
+    api.patch(&name, &ssa, &Patch::Apply(&a))
+        .await
+        .expect("apply Assistant");
+}
+
+#[when(regex = r#"^I delete the Assistant named "([^"]+)"$"#)]
+async fn delete_assistant(w: &mut E2eWorld, name: String) {
+    let api: Api<Assistant> = Api::namespaced(w.client().clone(), NS);
+    api.delete(&name, &DeleteParams::default())
+        .await
+        .expect("delete Assistant");
+}
+
+#[then(regex = r#"^the Job "([^"]+)" in namespace "([^"]+)" completes within (\d+) seconds$"#)]
+async fn job_completes(w: &mut E2eWorld, name: String, ns: String, secs: u64) {
+    let client = w.client().clone();
+    let n = name.clone();
+    let ns2 = ns.clone();
+    wait_until(secs, &format!("Job/{name} in {ns} to complete"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        let ns = ns2.clone();
+        async move {
+            let api: Api<Job> = Api::namespaced(client, &ns);
+            match api.get_opt(&n).await.unwrap() {
+                Some(job) => job
+                    .status
+                    .as_ref()
+                    .and_then(|s| s.succeeded)
+                    .map(|s| s > 0)
+                    .unwrap_or(false),
+                None => false,
+            }
+        }
+    })
+    .await;
+}
+
+#[then(regex = r#"^the Secret "([^"]+)" exists in namespace "([^"]+)" within (\d+) seconds$"#)]
+async fn secret_exists_in_ns(w: &mut E2eWorld, name: String, ns: String, secs: u64) {
+    let client = w.client().clone();
+    let n = name.clone();
+    let ns2 = ns.clone();
+    wait_until(secs, &format!("Secret/{name} in {ns}"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        let ns = ns2.clone();
+        async move {
+            let api: Api<Secret> = Api::namespaced(client, &ns);
+            api.get_opt(&n).await.unwrap().is_some()
+        }
+    })
+    .await;
+}
+
+#[then(regex = r#"^the Secret "([^"]+)" in namespace "([^"]+)" has no key "([^"]+)"$"#)]
+async fn secret_has_no_key(w: &mut E2eWorld, name: String, ns: String, key: String) {
+    let api: Api<Secret> = Api::namespaced(w.client().clone(), &ns);
+    let s = api.get(&name).await.expect("Secret");
+    let has_key = s.data.as_ref().map(|d| d.contains_key(&key)).unwrap_or(false);
+    assert!(!has_key, "Secret/{name} in {ns} unexpectedly has key {key:?}");
+}
+
+#[then(regex = r#"^the Deployment "([^"]+)" in namespace "([^"]+)" becomes available within (\d+) seconds$"#)]
+async fn deployment_becomes_available(w: &mut E2eWorld, name: String, ns: String, secs: u64) {
+    let client = w.client().clone();
+    let n = name.clone();
+    let ns2 = ns.clone();
+    wait_until(
+        secs,
+        &format!("Deployment/{name} in {ns} to become available"),
+        move || {
+            let client = client.clone();
+            let n = n.clone();
+            let ns = ns2.clone();
+            async move {
+                let api: Api<Deployment> = Api::namespaced(client, &ns);
+                match api.get_opt(&n).await.unwrap() {
+                    Some(dep) => dep
+                        .status
+                        .as_ref()
+                        .and_then(|s| s.available_replicas)
+                        .map(|r| r > 0)
+                        .unwrap_or(false),
+                    None => false,
+                }
+            }
+        },
+    )
+    .await;
+}
+
+#[then(regex = r#"^the Secret "([^"]+)" contains key "([^"]+)"$"#)]
+async fn secret_contains_key(w: &mut E2eWorld, name: String, key: String) {
+    let client = w.client().clone();
+    let n = name.clone();
+    let k = key.clone();
+    wait_until(60, &format!("Secret/{name} to contain key {key}"), move || {
+        let client = client.clone();
+        let n = n.clone();
+        let k = k.clone();
+        async move {
+            let api: Api<Secret> = Api::namespaced(client, NS);
+            match api.get_opt(&n).await.unwrap() {
+                Some(s) => s.data.as_ref().map(|d| d.contains_key(&k)).unwrap_or(false),
+                None => false,
+            }
+        }
+    })
+    .await;
+}
+
+#[then(
+    regex = r#"^no Deployments remain in namespace "([^"]+)" for assistant "([^"]+)" within (\d+) seconds$"#
+)]
+async fn no_deployments_remain(w: &mut E2eWorld, ns: String, assistant: String, secs: u64) {
+    let client = w.client().clone();
+    let ns2 = ns.clone();
+    let a = assistant.clone();
+    wait_until(
+        secs,
+        &format!("no Deployments left in {ns} for assistant {assistant}"),
+        move || {
+            let client = client.clone();
+            let ns = ns2.clone();
+            let a = a.clone();
+            async move {
+                let api: Api<Deployment> = Api::namespaced(client, &ns);
+                let lp = ListParams::default().labels(&sandbox_selector(NS, &a));
+                api.list(&lp).await.map(|l| l.items.is_empty()).unwrap_or(false)
+            }
+        },
+    )
+    .await;
+}
+
+#[then(regex = r#"^no Secrets remain in namespace "([^"]+)" for assistant "([^"]+)" within (\d+) seconds$"#)]
+async fn no_secrets_remain(w: &mut E2eWorld, ns: String, assistant: String, secs: u64) {
+    let client = w.client().clone();
+    let ns2 = ns.clone();
+    let a = assistant.clone();
+    wait_until(
+        secs,
+        &format!("no Secrets left in {ns} for assistant {assistant}"),
+        move || {
+            let client = client.clone();
+            let ns = ns2.clone();
+            let a = a.clone();
+            async move {
+                let api: Api<Secret> = Api::namespaced(client, &ns);
+                let lp = ListParams::default().labels(&sandbox_selector(NS, &a));
+                api.list(&lp).await.map(|l| l.items.is_empty()).unwrap_or(false)
+            }
+        },
+    )
     .await;
 }
 
