@@ -43,7 +43,7 @@ jobs:
       - name: Compute next semver tag from conventional commits
         id: bump
         if: github.event.inputs.tag == ''
-        uses: mathieudutour/github-tag-action@v6.2
+        uses: mathieudutour/github-tag-action@v7
         with:
           github_token: ${{ steps.app-token.outputs.token }}
           default_bump: false
